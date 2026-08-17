@@ -10,12 +10,17 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
-COPY package.json server.js ./
+# The app has no dependencies, so package.json isn't needed in the image.
+COPY server.js ./
 COPY public ./public
 
 # /data is the only writable path the app needs. Creating it here with the
 # right owner means a named volume inherits that ownership on first use.
 RUN mkdir -p /data && chown -R node:node /data /app
+
+# Stamped by CI with the commit sha so you can see what's deployed.
+ARG BUILD_REF=dev
+ENV HEARTH_VERSION=$BUILD_REF
 
 USER node
 

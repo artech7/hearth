@@ -577,7 +577,10 @@ function adminFamily() {
     <h2 class="section-title">Children</h2>
     ${st.children.map(person).join("") || `<p class="empty">No children yet.</p>`}
     <h2 class="section-title">Parents and guardians</h2>
-    ${st.admins.map(person).join("")}`;
+    ${st.admins.map(person).join("")}
+    <p class="meta mono" style="text-align:center;margin-top:28px;font-size:10px;color:var(--muted)">
+      build ${esc(String(st.version || "dev").slice(0, 12))}
+    </p>`;
 }
 
 /* ---------- render ---------- */

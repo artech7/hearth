@@ -6,6 +6,7 @@ const path = require("path");
 const crypto = require("crypto");
 
 const PORT = process.env.PORT || 8080;
+const VERSION = process.env.HEARTH_VERSION || "dev";
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, "data.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
 
@@ -107,7 +108,23 @@ function load() {
     db = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
   } catch (err) {
     db = seed();
-    save(true);
+    try {
+      save(true);
+    } catch (writeErr) {
+      if (writeErr.code === "EACCES" || writeErr.code === "EPERM" || writeErr.code === "ENOENT") {
+        console.error(
+          `\n  Can't write to ${DATA_FILE}\n\n` +
+          `  Running in Docker with a bind mount? The container runs as uid 1000,\n` +
+          `  so the host directory has to be writable by that user:\n\n` +
+          `      sudo mkdir -p /volume1/docker/hearth/data\n` +
+          `      sudo chown -R 1000:1000 /volume1/docker/hearth/data\n\n` +
+          `  Point the mount at that directory: /volume1/docker/hearth/data:/data\n` +
+          `  A named volume avoids this entirely.\n`
+        );
+        process.exit(1);
+      }
+      throw writeErr;
+    }
     console.log("Seeded a new family in " + DATA_FILE);
   }
   migrate();
@@ -324,6 +341,7 @@ function stateFor(user) {
     children: board.map(b => b.child),
     admins: db.users.filter(u => u.role === "admin").map(publicUser),
     settings: db.settings,
+    version: VERSION,
     allTasks: db.tasks.filter(t => t.active !== false),
     rewards: db.rewards.filter(r => r.active !== false),
     approvals: board.flatMap(b =>
@@ -388,6 +406,10 @@ const str = (v, max) => String(v == null ? "" : v).trim().slice(0, max);
 async function api(req, res, route) {
   const user = sessionUser(req);
   const body = req.method === "POST" ? await readBody(req) : {};
+
+  if (route === "version" && req.method === "GET") {
+    return json(res, 200, { version: VERSION, started: STARTED });
+  }
 
   if (route === "profiles" && req.method === "GET") {
     return json(res, 200, {
@@ -676,8 +698,10 @@ const server = http.createServer((req, res) => {
   serveStatic(req, res);
 });
 
+const STARTED = new Date().toISOString();
+
 server.listen(PORT, () => {
-  console.log(`Hearth running at http://localhost:${PORT}`);
+  console.log(`Hearth ${VERSION} running at http://localhost:${PORT}`);
   if (!fs.existsSync(path.join(PUBLIC_DIR, "index.html"))) {
     console.warn(
       `\n  Heads up: no index.html found in ${PUBLIC_DIR}\n` +
