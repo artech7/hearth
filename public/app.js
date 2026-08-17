@@ -522,7 +522,17 @@ function adminTasks() {
             <input class="field" id="f-pts" type="number" min="0" max="500" value="${f.points}"></div>
         </div>
         ${f.type === "chore" ? `<div class="meta">No set length. The child runs a timer while they work and taps done when they're finished; you check it off from the queue.</div>` : ""}
-        <div><label class="lab">Days</label>${dayChips(f.days)}</div>
+        <div>
+          <div class="spread" style="margin-bottom:6px">
+            <label class="lab" style="margin:0">Days</label>
+            <div class="row" style="gap:6px">
+              <button type="button" class="btn quiet small" data-act="allDays">All</button>
+              <button type="button" class="btn quiet small" data-act="noDays">None</button>
+            </div>
+          </div>
+          ${dayChips(f.days)}
+          ${f.days.length ? "" : `<div class="meta" style="margin-top:8px;color:var(--warn)">No days selected — pick at least one before saving.</div>`}
+        </div>
         <div class="row" style="justify-content:flex-end;margin-top:4px">
           ${f.id ? `<button class="btn quiet small" data-act="cancelForm">Cancel</button>` : ""}
           <button class="btn accent" data-act="saveTask">${f.id ? "Save changes" : "Add task"}</button>
@@ -799,6 +809,18 @@ root.addEventListener("click", async e => {
       case "fulfill": setState(await post("fulfill", { id: node.dataset.id })); toast("Marked as given"); return;
       case "denyRedemption": setState(await post("denyRedemption", { id: node.dataset.id })); toast("Points refunded"); return;
 
+      case "allDays": {
+        const f = formState("task", { days: [] });
+        readTaskForm(f);
+        f.days = [0, 1, 2, 3, 4, 5, 6];
+        return render();
+      }
+      case "noDays": {
+        const f = formState("task", { days: [] });
+        readTaskForm(f);
+        f.days = [];
+        return render();
+      }
       case "toggleDay": {
         const f = formState("task", { days: [] });
         const i = +node.dataset.i;
@@ -826,6 +848,7 @@ root.addEventListener("click", async e => {
       case "saveTask": {
         const f = formState("task", { id: "", days: [0, 1, 2, 3, 4, 5, 6] });
         readTaskForm(f);
+        if (!f.days.length) return toast("Pick at least one day.");
         setState(await post("saveTask", f));
         S.form = null; toast(f.id ? "Task updated" : "Task added"); return;
       }
@@ -875,7 +898,9 @@ function readTaskForm(f) {
     f.points = +val("f-pts");
     if (el("#f-dur")) f.durationMin = +val("f-dur");
   }
-  if (!f.days || !f.days.length) f.days = [0, 1, 2, 3, 4, 5, 6];
+  // An empty selection stays empty — clearing the days is a legitimate step
+  // on the way to picking one, not a signal to select them all.
+  if (!Array.isArray(f.days)) f.days = [];
 }
 
 function readRewardForm(f) {

@@ -16,6 +16,9 @@ const MIME = {
   ".js": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
+  ".png": "image/png",
+  ".webmanifest": "application/manifest+json",
+  ".json": "application/json",
 };
 
 /* ---------- storage ---------- */
@@ -564,8 +567,14 @@ async function api(req, res, route) {
     if (!isAdmin) return deny();
     const title = str(body.title, 60);
     if (!title) return json(res, 400, { error: "Give the task a name." });
-    const days = Array.isArray(body.days) && body.days.length
-      ? body.days.map(d => num(d, 0, 6, 0)) : [0, 1, 2, 3, 4, 5, 6];
+    // An explicitly empty list is a mistake worth reporting; a missing one
+    // just means "every day".
+    if (Array.isArray(body.days) && !body.days.length) {
+      return json(res, 400, { error: "Pick at least one day." });
+    }
+    const days = Array.isArray(body.days)
+      ? [...new Set(body.days.map(d => num(d, 0, 6, 0)))].sort()
+      : [0, 1, 2, 3, 4, 5, 6];
     const type = body.type === "chore" ? "chore" : "study";
     const fields = {
       title,
