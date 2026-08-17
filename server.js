@@ -390,7 +390,13 @@ function serveStatic(req, res) {
   if (!file.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end("forbidden"); }
   fs.readFile(file, (err, buf) => {
     if (err) { res.writeHead(404); return res.end("not found"); }
-    res.writeHead(200, { "Content-Type": MIME[path.extname(file)] || "application/octet-stream" });
+    // Revalidate on every load. Without this a browser can keep serving the
+    // old app.js from cache after an update, so a deploy appears to do nothing.
+    res.writeHead(200, {
+      "Content-Type": MIME[path.extname(file)] || "application/octet-stream",
+      "Cache-Control": "no-cache",
+      "ETag": `"${VERSION}"`,
+    });
     res.end(buf);
   });
 }

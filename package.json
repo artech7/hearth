@@ -1,0 +1,10 @@
+{
+  "name": "hearth",
+  "version": "1.0.0",
+  "description": "Self-hosted study and chore board for families, with server-enforced timers.",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "license": "MIT",
+  "private": true
+}

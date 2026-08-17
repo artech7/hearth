@@ -1,0 +1,28 @@
+name: hearth
+
+# Pulls a prebuilt image from GitHub Container Registry — no build step on the
+# Docker host. Change the image owner if your repo lives elsewhere.
+
+services:
+  hearth:
+    image: ghcr.io/artech7/hearth:latest
+    container_name: hearth
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
+    ports:
+      - "${HEARTH_PORT:-8080}:8080"
+    environment:
+      TZ: ${TZ:-America/Denver}
+    volumes:
+      - hearth-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  hearth-data:

@@ -119,9 +119,51 @@ docker build -t hearth:latest .
 
 Then create a stack in Dockhand and paste the contents of `compose.dockhand.yaml`, which references `hearth:latest` and never tries to build. Set `TZ` and `HEARTH_PORT` in Dockhand's stack environment variables. Rebuild and redeploy the stack whenever you change the source.
 
-**Or deploy it as a Git stack.** Push this folder to a repository and point Dockhand at it. The checkout gives it the build context, so `compose.yaml` works as-is and webhooks can redeploy on push.
+**Or deploy it as a Git stack.** Push this folder to a repository and point Dockhand at it. The checkout gives it the build context, so `compose.yaml` works as-is and webhooks can redeploy on push. See below.
 
-**Or push to a registry** if you have one, which also lets other hosts pull it:
+### Deploying as a Git stack
+
+Dockhand checks the repository out onto its own filesystem and deploys from there, which is what gives `build:` the source it needs.
+
+**1. Put this folder in a repository.** Any Git host works — GitHub, Gitea, Forgejo. A private repo is the right call: the compose file names your timezone and port, and the repo is deploy-time input to your home network.
+
+```bash
+cd hearth
+git init
+git add .
+git commit -m "Hearth"
+git branch -M main
+git remote add origin https://github.com/YOUR-USER/hearth.git
+git push -u origin main
+```
+
+The included `.gitignore` keeps `data.json` and `.env` out. Check that `git status` shows no `data.json` before your first push — that file is your family's actual data, PIN hashes included.
+
+**2. Give Dockhand credentials** if the repo is private: Settings → Git. A personal access token with read access to that one repo is enough. HTTPS repository URLs work; you don't need to set up SSH keys.
+
+**3. Create the stack.** Stacks → Create → deploy from Git. You'll need:
+
+| Field | Value |
+| --- | --- |
+| Repository URL | `https://github.com/YOUR-USER/hearth.git` |
+| Branch | `main` |
+| Compose path | `compose.yaml` |
+
+Add `TZ` and `HEARTH_PORT` as stack environment variables in Dockhand's UI rather than committing a `.env` — Dockhand manages stack variables itself and encrypts them.
+
+**4. Deploy.** The first run builds the image, which takes a minute; after that it's cached.
+
+**5. Optionally wire up the webhook** so a push redeploys automatically. Copy the stack's webhook URL from its settings, then in GitHub go to Settings → Webhooks → Add webhook, paste the URL, set the content type to `application/json`, and set a secret — Dockhand verifies the signature and refuses webhooks without a configured secret. It compares each commit against the stack's compose directory, so a README-only push is skipped rather than triggering a pointless redeploy.
+
+If you'd rather poll than push, Dockhand can also sync on a cron schedule.
+
+**Why `pull_policy: build` is in `compose.yaml`:** without it, compose sees an existing `hearth:latest` and starts that, so a redeploy after a source change would quietly run the old code. `build` forces a rebuild every time; layer caching keeps it quick when nothing changed.
+
+**Or let GitHub build it for you.** This is the most reliable option on a NAS, where building through a Docker UI tends to fail on build-context and BuildKit temp-mount issues. `.github/workflows/build-image.yml` builds on every push to `main` and publishes to GHCR for both amd64 and arm64.
+
+After the first successful run, open the package on GitHub (your profile → Packages → hearth → Package settings) and set its visibility to **public**, or the Docker host will need registry credentials to pull it. Then deploy `compose.ghcr.yaml` as an internal stack in Dockhand — it references `ghcr.io/OWNER/hearth:latest` and never builds anything. To upgrade later, push to `main`, wait for the action, then redeploy the stack with re-pull enabled.
+
+**Or push to a registry by hand** if you have one:
 
 ```bash
 docker build -t ghcr.io/YOUR-USER/hearth:latest .
@@ -178,9 +220,12 @@ PINs over plain HTTP are fine on a home LAN and not fine on the open internet. I
 ## Files
 
 ```
+.github/workflows/       builds and publishes the image on push
+.gitignore               keeps data.json and .env out of the repo
 Dockerfile               image definition
 compose.yaml             build and run locally
 compose.dockhand.yaml    image-only stack for Dockhand's editor
+compose.ghcr.yaml        pulls the prebuilt image from GHCR
 .env.example             host port and timezone
 server.js        API, auth, timer arbitration, JSON persistence
 public/index.html

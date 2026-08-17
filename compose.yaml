@@ -4,6 +4,10 @@ services:
   hearth:
     build: .
     image: hearth:latest
+    # Rebuild on every `up`, so a git pull that changes the source actually
+    # ships. Without this, compose reuses the existing hearth:latest and a
+    # redeploy silently runs the old code. Cached layers keep it fast.
+    pull_policy: build
     container_name: hearth
     init: true
     restart: unless-stopped
