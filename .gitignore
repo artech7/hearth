@@ -1,0 +1,16 @@
+# The family's actual data — never commit this
+data.json
+*.data.json
+
+# Local secrets and overrides
+.env
+compose.override.yaml
+compose.override.yml
+
+# Build output and scratch
+node_modules
+*.log
+*.zip
+
+# macOS
+.DS_Store
