@@ -329,7 +329,7 @@ function publicUser(u) {
 function rewardsFor(childId) {
   return db.rewards
     .filter(r => r.active !== false && (r.childIds.length === 0 || r.childIds.includes(childId)))
-    .map(r => ({ id: r.id, title: r.title, cost: r.cost, childIds: r.childIds }));
+    .map(r => ({ id: r.id, title: r.title, cost: r.cost, childIds: r.childIds, sky: r.sky || "" }));
 }
 
 function stateFor(user) {
@@ -618,6 +618,8 @@ async function api(req, res, route) {
       title,
       cost: num(body.cost, 1, 10000, 20),
       childIds: Array.isArray(body.childIds) ? body.childIds.filter(cid => db.users.some(u => u.id === cid)) : [],
+      // Empty means the card picks its own sky from the reward's name.
+      sky: str(body.sky, 20).replace(/[^a-z]/g, ""),
     };
     const existing = db.rewards.find(r => r.id === body.id);
     if (existing) Object.assign(existing, fields);

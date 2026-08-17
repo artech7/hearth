@@ -224,9 +224,28 @@ function makeRng(seed) {
 }
 
 const SKIES = [
-  ["#12305C", "#2E5E7E"], ["#1B2E4A", "#4A5F78"], ["#241F४A".replace("४", "4"), "#5B4A72"],
-  ["#0F2E3A", "#356A63"], ["#2A1E38", "#6B4763"], ["#13263A", "#3E6B84"],
+  { id: "midnight", name: "Midnight", from: "#12305C", to: "#2E5E7E" },
+  { id: "slate",    name: "Slate",    from: "#1B2E4A", to: "#4A5F78" },
+  { id: "ink",      name: "Ink",      from: "#0E1420", to: "#2B3B55" },
+  { id: "ice",      name: "Ice",      from: "#152B33", to: "#4E8092" },
+  { id: "pine",     name: "Pine",     from: "#0F2E3A", to: "#356A63" },
+  { id: "aurora",   name: "Aurora",   from: "#08221F", to: "#1F6B57" },
+  { id: "moss",     name: "Moss",     from: "#17281B", to: "#46704A" },
+  { id: "plum",     name: "Plum",     from: "#241F4A", to: "#5B4A72" },
+  { id: "violet",   name: "Violet",   from: "#1A1240", to: "#4B3A8C" },
+  { id: "dusk",     name: "Dusk",     from: "#221A2E", to: "#6E5A7A" },
+  { id: "mauve",    name: "Mauve",    from: "#2A1E38", to: "#6B4763" },
+  { id: "rose",     name: "Rose",     from: "#331726", to: "#8A4A5E" },
+  { id: "ember",    name: "Ember",    from: "#2B1A18", to: "#7A4230" },
+  { id: "rust",     name: "Rust",     from: "#301C12", to: "#8A5326" },
+  { id: "copper",   name: "Copper",   from: "#241410", to: "#96602B" },
+  { id: "steel",    name: "Steel",    from: "#13263A", to: "#3E6B84" },
 ];
+
+function skyFor(title, chosen) {
+  const picked = SKIES.find(s => s.id === chosen);
+  return picked || SKIES[seedFrom(title) % SKIES.length];
+}
 
 function ridge(rand, baseY, height, jag, width) {
   const step = width / 9;
@@ -259,13 +278,13 @@ function svgLayer(inner, w, h) {
   return `<div class="player"><svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid slice">${inner}</svg></div>`;
 }
 
-function rewardScene(title, uid) {
+function rewardScene(title, uid, chosenSky) {
   const rand = makeRng(seedFrom(title));
   const W = 360, H = 520;
   // Gradient ids share one document across the whole grid, so they have to be
   // unique per card or every card renders with the first card's sky.
   const gid = "s" + (uid || seedFrom(title).toString(36));
-  const sky = SKIES[Math.floor(rand() * SKIES.length)];
+  const sky = skyFor(title, chosenSky);
   const layers = [];
 
   // 1 — sky, moon, stars
@@ -276,7 +295,7 @@ function rewardScene(title, uid) {
   }
   layers.push(svgLayer(`
     <defs><linearGradient id="sky-${gid}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${sky[0]}"/><stop offset="1" stop-color="${sky[1]}"/>
+      <stop offset="0" stop-color="${sky.from}"/><stop offset="1" stop-color="${sky.to}"/>
     </linearGradient></defs>
     <rect width="${W}" height="${H}" fill="url(#sky-${gid})"/>
     ${stars}
@@ -434,7 +453,7 @@ function childRewards() {
     ${st.rewards.length ? `<div class="reward-grid">` + st.rewards.map(r => {
       const afford = st.me.points >= r.cost;
       return `<div class="rcard" data-scene="${esc(r.id)}">
-        ${rewardScene(r.title + r.id, r.id.replace(/[^a-zA-Z0-9]/g, ""))}
+        ${rewardScene(r.title + r.id, r.id.replace(/[^a-zA-Z0-9]/g, ""), r.sky)}
         <div class="rcard-body">
           <div style="min-width:0">
             <h3>${esc(r.title)}</h3>
@@ -676,7 +695,8 @@ function adminTasks() {
 
 function adminRewards() {
   const st = S.state;
-  const f = formState("reward", { id: "", title: "", cost: 25, childIds: [] });
+  const f = formState("reward", { id: "", title: "", cost: 25, childIds: [], sky: "" });
+  const previewTitle = f.title || "Reward name";
 
   return `
     <div class="card form" style="margin-bottom:24px">
@@ -686,6 +706,25 @@ function adminRewards() {
           <input class="field" id="r-title" value="${esc(f.title)}" placeholder="Movie night, later bedtime…"></div>
         <div><label class="lab" for="r-cost">Cost in points</label>
           <input class="field" id="r-cost" type="number" min="1" max="10000" value="${f.cost}"></div>
+        <div>
+          <label class="lab">Card sky</label>
+          <div class="sky-picker">
+            <button type="button" class="swatch auto ${f.sky ? "" : "on"}" data-act="pickSky" data-sky=""
+              title="Chosen from the reward's name">Auto</button>
+            ${SKIES.map(k => `<button type="button" class="swatch ${f.sky === k.id ? "on" : ""}"
+              data-act="pickSky" data-sky="${k.id}" title="${k.name}"
+              style="background:linear-gradient(160deg, ${k.from}, ${k.to})"></button>`).join("")}
+          </div>
+          <div class="rcard preview" style="margin-top:14px">
+            ${rewardScene(previewTitle + (f.id || "preview"), "prev", f.sky)}
+            <div class="rcard-body">
+              <div style="min-width:0">
+                <h3>${esc(previewTitle)}</h3>
+                <div class="cost">${f.cost || 0} POINTS</div>
+              </div>
+            </div>
+          </div>
+        </div>
         <div><label class="lab">Who can redeem it</label>
           <div class="row" style="gap:8px;flex-wrap:wrap">
             <button type="button" class="btn small ${f.childIds.length === 0 ? "accent on" : ""}" data-act="toggleChild" data-id="all">Everyone</button>
@@ -702,7 +741,7 @@ function adminRewards() {
       <div class="spread">
         <div>
           <h3>${esc(r.title)}</h3>
-          <div class="meta">${r.cost} pts · ${r.childIds.length ? r.childIds.map(cid => (st.children.find(c => c.id === cid) || {}).name).join(", ") : "everyone"}</div>
+          <div class="meta">${r.cost} pts · ${r.childIds.length ? r.childIds.map(cid => (st.children.find(c => c.id === cid) || {}).name).join(", ") : "everyone"} · ${esc(skyFor(r.title + r.id, r.sky).name.toLowerCase())}${r.sky ? "" : " (auto)"}</div>
         </div>
         <div class="row">
           <button class="btn small quiet" data-act="editReward" data-id="${r.id}">Edit</button>
@@ -996,6 +1035,12 @@ root.addEventListener("click", async e => {
         f.days = f.days.includes(i) ? f.days.filter(d => d !== i) : f.days.concat(i).sort();
         readTaskForm(f); return render();
       }
+      case "pickSky": {
+        const f = formState("reward", { childIds: [] });
+        readRewardForm(f);
+        f.sky = node.dataset.sky;
+        return render();
+      }
       case "toggleChild": {
         const f = formState("reward", { childIds: [] });
         readRewardForm(f);
@@ -1027,7 +1072,7 @@ root.addEventListener("click", async e => {
 
       case "editReward": {
         const r = S.state.rewards.find(x => x.id === node.dataset.id);
-        S.form = Object.assign({ kind: "reward" }, r); return render();
+        S.form = Object.assign({ kind: "reward", sky: "" }, r); return render();
       }
       case "saveReward": {
         const f = formState("reward", { id: "", childIds: [] });
@@ -1075,6 +1120,7 @@ function readTaskForm(f) {
 function readRewardForm(f) {
   if (el("#r-title")) { f.title = val("r-title"); f.cost = +val("r-cost"); }
   if (!f.childIds) f.childIds = [];
+  if (f.sky === undefined) f.sky = "";
 }
 
 function readUserForm(f) {
