@@ -1,0 +1,28 @@
+name: hearth
+
+services:
+  hearth:
+    build: .
+    image: hearth:latest
+    container_name: hearth
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
+    ports:
+      - "${HEARTH_PORT:-8080}:8080"
+    environment:
+      # Task days and allowance renewal follow this clock. Set it to your own.
+      TZ: ${TZ:-America/Denver}
+    volumes:
+      - hearth-data:/data
+    # The app writes nothing but DATA_FILE, so everything else can be read-only.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  hearth-data:

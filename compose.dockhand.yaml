@@ -1,0 +1,30 @@
+name: hearth
+
+# For Dockhand internal stacks. Dockhand keeps pasted YAML in its own database,
+# so there is no source tree on the host to build from — build and tag the image
+# once on the Docker host first (see README), then deploy this.
+
+services:
+  hearth:
+    image: hearth:latest
+    container_name: hearth
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
+    ports:
+      - "${HEARTH_PORT:-8080}:8080"
+    environment:
+      TZ: ${TZ:-America/Denver}
+    volumes:
+      - hearth-data:/data
+    # The app writes nothing but DATA_FILE, so everything else can be read-only.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  hearth-data:
