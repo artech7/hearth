@@ -17,8 +17,10 @@
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+/* Dark applies when the OS asks for it and the user hasn't overridden,
+   or when the user has explicitly chosen it. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #262B27;
     --light: #30362F;
     --dark: #1A1E1B;
@@ -30,6 +32,19 @@
     --good: #86B999;
     --warn: #DA9A78;
   }
+}
+
+:root[data-theme="dark"] {
+    --bg: #262B27;
+    --light: #30362F;
+    --dark: #1A1E1B;
+    --track: #20241F;
+    --ink: #DDE4DD;
+    --muted: #939E95;
+    --accent: #D8A24E;
+    --accent-ink: #E4B76F;
+    --good: #86B999;
+    --warn: #DA9A78;
 }
 
 * { box-sizing: border-box; }
@@ -239,3 +254,14 @@ label.lab { display: block; font-size: 12.5px; color: var(--muted); margin-botto
   .dial { width: 244px; height: 244px; }
   .readout { font-size: 46px; }
 }
+
+/* theme switch */
+.theme {
+  width: 34px; height: 34px; border-radius: 50%; border: 0;
+  background: var(--bg); box-shadow: var(--out-xs); color: var(--muted);
+  display: grid; place-items: center; flex: 0 0 34px;
+  transition: box-shadow 160ms ease, color 160ms ease;
+}
+.theme:hover { color: var(--ink); }
+.theme:active { box-shadow: var(--in-sm); }
+.theme svg { width: 16px; height: 16px; fill: currentColor; }

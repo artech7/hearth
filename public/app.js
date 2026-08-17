@@ -19,6 +19,52 @@ const S = {
   taskKind: "study",
 };
 
+/* ---------- theme ---------- */
+
+const THEMES = ["system", "light", "dark"];
+
+function currentTheme() {
+  try {
+    const saved = localStorage.getItem("hearth-theme");
+    return THEMES.includes(saved) ? saved : "system";
+  } catch (err) {
+    return "system";
+  }
+}
+
+// Old browsers and some webviews have no matchMedia; theming must not take
+// the whole app down with it.
+function darkMedia() {
+  return typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-color-scheme: dark)")
+    : null;
+}
+
+function applyTheme(mode) {
+  const root = document.documentElement;
+  if (mode === "system") root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", mode);
+  const mq = darkMedia();
+  const dark = mode === "dark" || (mode === "system" && !!mq && mq.matches);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", dark ? "#262B27" : "#DDE3DD");
+}
+
+function cycleTheme() {
+  const next = THEMES[(THEMES.indexOf(currentTheme()) + 1) % THEMES.length];
+  try { localStorage.setItem("hearth-theme", next); } catch (err) { /* private mode */ }
+  applyTheme(next);
+  return next;
+}
+
+applyTheme(currentTheme());
+const themeMedia = darkMedia();
+if (themeMedia && themeMedia.addEventListener) {
+  themeMedia.addEventListener("change", () => {
+    if (currentTheme() === "system") applyTheme("system");
+  });
+}
+
 /* ---------- helpers ---------- */
 
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
@@ -83,6 +129,9 @@ const ICON = {
   pause: '<svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>',
   check: '<svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>',
   back: '<svg viewBox="0 0 24 24"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>',
+  system: '<svg viewBox="0 0 24 24"><path d="M4 5h16v10H4zm0 12h16v2H4z"/></svg>',
+  sun: '<svg viewBox="0 0 24 24"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5h0v3h0zm-1 0h2v3h-2zm0 19h2v3h-2zM2 11h3v2H2zm17 0h3v2h-3zM4.2 5.6l1.4-1.4 2.1 2.1-1.4 1.4zM16.3 17.7l1.4-1.4 2.1 2.1-1.4 1.4zM4.2 18.4l2.1-2.1 1.4 1.4-2.1 2.1zM16.3 6.3l2.1-2.1 1.4 1.4-2.1 2.1z"/></svg>',
+  moon: '<svg viewBox="0 0 24 24"><path d="M12.3 3a7.5 7.5 0 1 0 8.7 9.6A6.5 6.5 0 0 1 12.3 3z"/></svg>',
   lock: '<svg viewBox="0 0 24 24"><path d="M17 9V7a5 5 0 0 0-10 0v2H5v12h14V9h-2zM9 7a3 3 0 0 1 6 0v2H9V7z"/></svg>',
 };
 
@@ -101,7 +150,10 @@ function ringSvg(pct, r, sw) {
 function loginView() {
   if (!S.pick) {
     return `<div class="login"><div class="panel">
-      <p class="eyebrow">Hearth</p>
+      <div class="spread" style="margin-bottom:18px">
+        <p class="eyebrow" style="margin:0">Hearth</p>
+        ${themeButton()}
+      </div>
       <h2 style="margin:0 0 20px;font-size:19px;font-weight:600;letter-spacing:-.02em">Who's here?</h2>
       <div class="profile-grid">
         ${S.profiles.map(p => `
@@ -174,7 +226,7 @@ function taskCard(t) {
       </div>
       <div style="flex:1;min-width:0">
         <h3>${esc(t.title)}</h3>
-        <div class="meta">${chore ? "chore · no set time" : t.durationMin + " min · study"} · ${t.points} pts</div>
+        <div class="meta">${chore ? "chore · no set time" : t.durationMin + " min · study"} · ${t.points} pts${t.shared ? " · shared" : ""}</div>
         <div style="margin-top:8px">${statusChip(t)}</div>
       </div>
       ${done ? `<button class="pad" disabled aria-label="Finished">${ICON.check}</button>`
@@ -205,6 +257,7 @@ function childView() {
         <span class="points" title="allowance + saved">
           <b>${st.me.points}</b><span>PTS</span>
         </span>
+        ${themeButton()}
         <button class="btn quiet small" data-act="logout">Sign out</button>
       </div>
     </div>
@@ -326,6 +379,13 @@ function focusView() {
 
 /* ---------- admin ---------- */
 
+function themeButton() {
+  const mode = currentTheme();
+  const icon = mode === "light" ? ICON.sun : mode === "dark" ? ICON.moon : ICON.system;
+  return `<button class="theme" data-act="theme" title="Theme: ${mode}"
+    aria-label="Theme: ${mode}. Tap to change.">${icon}</button>`;
+}
+
 function tabBar(labels) {
   return `<div class="tabs" style="grid-template-columns:repeat(${labels.length},1fr)">
     <span class="thumb" style="width:calc((100% - 10px)/${labels.length});transform:translateX(calc(${S.tab} * 100%))"></span>
@@ -345,7 +405,10 @@ function adminView() {
         <span class="avatar" data-color="${esc(st.me.color)}">${esc(initials(st.me.name))}</span>
         <div><h1>${esc(st.me.name)}</h1><div class="date">${esc(st.date)}</div></div>
       </div>
-      <button class="btn quiet small" data-act="logout">Sign out</button>
+      <div class="row">
+        ${themeButton()}
+        <button class="btn quiet small" data-act="logout">Sign out</button>
+      </div>
     </div>
     ${tabBar(tabs)}
     ${body}
@@ -450,6 +513,7 @@ function adminTasks() {
         <div class="grid2">
           <div><label class="lab" for="f-child">Child</label>
             <select class="field" id="f-child">
+              <option value="all" ${f.childId === "all" ? "selected" : ""}>All children</option>
               ${st.children.map(c => `<option value="${c.id}" ${c.id === f.childId ? "selected" : ""}>${esc(c.name)}</option>`).join("")}
             </select></div>
           ${f.type === "chore" ? "" : `<div><label class="lab" for="f-dur">Minutes</label>
@@ -465,7 +529,7 @@ function adminTasks() {
         </div>
       </div>
     </div>
-    ${st.children.map(c => {
+    ${[{ id: "all", name: "Everyone" }].concat(st.children).map(c => {
       const list = st.allTasks.filter(t => t.childId === c.id && t.type === kind);
       if (!list.length) return "";
       return `<h2 class="section-title">${esc(c.name)}</h2>
@@ -699,6 +763,7 @@ root.addEventListener("click", async e => {
         return;
       case "del": S.pin = S.pin.slice(0, -1); S.err = ""; return render();
 
+      case "theme": cycleTheme(); return render();
       case "tab": S.tab = +node.dataset.i; S.form = null; return render();
       case "taskKind": S.taskKind = node.dataset.k; S.form = null; return render();
       case "logout":

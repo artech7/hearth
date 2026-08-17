@@ -44,6 +44,7 @@ function id(prefix) {
 }
 
 const DEFAULT_ALLOWANCE = 500;
+const SHARED = "all";
 
 function newChild(name, color, pin, earned) {
   return {
@@ -100,6 +101,17 @@ function migrate() {
   }
   for (const t of db.tasks || []) {
     if (t.type === "chore" && t.durationMin !== null) t.durationMin = null;
+  }
+  // Log keys used to be date:taskId. They now carry the child, since a task
+  // can belong to everyone.
+  for (const key of Object.keys(db.logs || {})) {
+    if (key.split(":").length === 2) {
+      const log = db.logs[key];
+      const moved = key + ":" + log.childId;
+      log.key = moved;
+      db.logs[moved] = log;
+      delete db.logs[key];
+    }
   }
   for (const r of db.redemptions || []) {
     if (r.fromAllowance === undefined) { r.fromAllowance = 0; r.fromEarned = r.cost; }
@@ -213,6 +225,10 @@ function refreshAllowance(child) {
   return child;
 }
 
+function ownsTask(task, childId) {
+  return task.childId === childId || task.childId === SHARED;
+}
+
 function balance(child) {
   return child.allowanceRemaining + child.earned;
 }
@@ -229,15 +245,15 @@ function spend(child, cost) {
   return { fromAllowance, fromEarned };
 }
 
-function logKey(taskId, date) {
-  return date + ":" + taskId;
+function logKey(taskId, date, childId) {
+  return date + ":" + taskId + ":" + childId;
 }
 
-function getLog(task, date) {
-  const key = logKey(task.id, date);
+function getLog(task, date, childId) {
+  const key = logKey(task.id, date, childId);
   if (!db.logs[key]) {
     db.logs[key] = {
-      key, taskId: task.id, childId: task.childId, date,
+      key, taskId: task.id, childId, date,
       status: "idle", accumulatedMs: 0, startedAt: null,
       completedAt: null, approvedBy: null, awardedPoints: 0,
     };
@@ -265,7 +281,7 @@ function settle(log, task) {
 
   if (task.type === "study") {
     log.status = "done";
-    award(task.childId, task.points, log);
+    award(log.childId, task.points, log);
   } else {
     log.status = "awaiting";
   }
@@ -282,12 +298,12 @@ function award(childId, points, log) {
 
 function tasksFor(childId, date, day) {
   return db.tasks
-    .filter(t => t.childId === childId && t.active !== false && t.days.includes(day))
+    .filter(t => (t.childId === childId || t.childId === SHARED) && t.active !== false && t.days.includes(day))
     .map(t => {
-      const log = settle(getLog(t, date), t);
+      const log = settle(getLog(t, date, childId), t);
       return {
         id: t.id, title: t.title, type: t.type, durationMin: t.durationMin,
-        points: t.points, days: t.days, childId: t.childId,
+        points: t.points, days: t.days, childId: t.childId, shared: t.childId === SHARED,
         status: log.status, elapsedMs: elapsedMs(log), running: log.status === "running",
         awardedPoints: log.awardedPoints, key: log.key,
       };
@@ -458,9 +474,9 @@ async function api(req, res, route) {
   if (route === "start" || route === "pause") {
     const task = db.tasks.find(t => t.id === body.taskId);
     if (!task) return json(res, 404, { error: "Task not found." });
-    if (user.role !== "child" || task.childId !== user.id) return json(res, 403, { error: "That isn't your task." });
+    if (user.role !== "child" || !ownsTask(task, user.id)) return json(res, 403, { error: "That isn't your task." });
 
-    const log = settle(getLog(task, today()), task);
+    const log = settle(getLog(task, today(), user.id), task);
     if (log.status === "done" || log.status === "awaiting") {
       return json(res, 409, { error: "This one's already finished." });
     }
@@ -481,10 +497,10 @@ async function api(req, res, route) {
   if (route === "submit") {
     const task = db.tasks.find(t => t.id === body.taskId);
     if (!task) return json(res, 404, { error: "Task not found." });
-    if (user.role !== "child" || task.childId !== user.id) return json(res, 403, { error: "That isn't your task." });
+    if (user.role !== "child" || !ownsTask(task, user.id)) return json(res, 403, { error: "That isn't your task." });
     if (task.type !== "chore") return json(res, 400, { error: "Study blocks finish on their own timer." });
 
-    const log = getLog(task, today());
+    const log = getLog(task, today(), user.id);
     if (log.status !== "running" && log.status !== "paused") {
       return json(res, 409, { error: "Start it before marking it done." });
     }
@@ -560,9 +576,15 @@ async function api(req, res, route) {
       days,
     };
     const existing = db.tasks.find(t => t.id === body.id);
-    if (existing) Object.assign(existing, fields);
+    if (existing) {
+      Object.assign(existing, fields);
+      if (body.childId === SHARED || db.users.some(u => u.id === body.childId && u.role === "child")) {
+        existing.childId = body.childId;
+      }
+    }
     else {
-      if (!db.users.some(u => u.id === body.childId && u.role === "child")) {
+      const forAll = body.childId === SHARED;
+      if (!forAll && !db.users.some(u => u.id === body.childId && u.role === "child")) {
         return json(res, 400, { error: "Pick a child for this task." });
       }
       db.tasks.push(Object.assign({ id: id("t"), childId: body.childId, active: true }, fields));
@@ -646,7 +668,7 @@ async function api(req, res, route) {
       return json(res, 400, { error: "Keep at least one parent account." });
     }
     db.users = db.users.filter(u => u.id !== body.id);
-    db.tasks = db.tasks.filter(t => t.childId !== body.id);
+    db.tasks = db.tasks.filter(t => t.childId !== body.id);  // shared tasks survive
     for (const [token, s] of sessions) if (s.userId === body.id) sessions.delete(token);
     persistSessions();
     save();
