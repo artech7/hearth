@@ -105,6 +105,8 @@ function toast(msg) {
 }
 
 function setState(data) {
+  if (data.tasks && S.state) notifyFinished(data.tasks);
+  else if (data.tasks) data.tasks.forEach(t => chimed.add("seen:" + (t.key || t.id)));
   S.state = data;
   S.fetchedAt = Date.now();
   S.view = data.me.role === "admin" ? "admin" : "child";
@@ -360,7 +362,7 @@ function taskCard(t) {
       </div>
       <div style="flex:1;min-width:0">
         <h3>${esc(t.title)}</h3>
-        <div class="meta">${chore ? "chore · no set time" : t.durationMin + " min · study"} · ${t.points} pts${t.shared ? " · shared" : ""}</div>
+        <div class="meta">${chore ? "chore · no set time" : t.durationMin + " min · study"} · ${t.points} pts${t.shared ? " · shared" : ""}${t.onceOn ? " · today only" : ""}</div>
         <div style="margin-top:8px">${statusChip(t)}</div>
       </div>
       ${done ? `<button class="pad" disabled aria-label="Finished">${ICON.check}</button>`
@@ -400,15 +402,40 @@ function childView() {
   </div>`;
 }
 
+function weekStrip(week, streak) {
+  const letters = ["S", "M", "T", "W", "T", "F", "S"];
+  return `<div class="card flat" style="margin-bottom:20px">
+    <div class="spread" style="margin-bottom:14px">
+      <div>
+        <div style="font-size:15px;font-weight:500">${streak > 0 ? streak + " day" + (streak === 1 ? "" : "s") + " running" : "This week"}</div>
+        <div class="meta" style="margin-top:4px">${
+          streak > 0 ? "Finish today to keep it going" : "Finish everything to start a streak"}</div>
+      </div>
+      ${streak > 0 ? `<span class="chip live">${streak}</span>` : ""}
+    </div>
+    <div class="week">
+      ${week.map(d => {
+        const dow = new Date(d.date + "T12:00:00").getDay();
+        const state = d.total === 0 ? "rest" : d.done >= d.total ? "full" : d.done > 0 ? "part" : "none";
+        const pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
+        return `<div class="wday ${state}" title="${d.date}: ${d.done} of ${d.total} done">
+          <span class="dot"></span>
+          <span class="lbl">${letters[dow]}</span>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
 function childToday() {
   const st = S.state;
   const study = st.tasks.filter(t => t.type === "study");
   const chores = st.tasks.filter(t => t.type === "chore");
   const left = st.tasks.filter(t => t.status !== "done").length;
 
-  if (!st.tasks.length) return `<p class="empty">Nothing assigned for today.</p>`;
+  if (!st.tasks.length) return weekStrip(st.week || [], st.streak || 0) + `<p class="empty">Nothing assigned for today.</p>`;
 
-  return `
+  return weekStrip(st.week || [], st.streak || 0) + `
     <div class="card flat" style="margin-bottom:20px">
       <div class="spread">
         <div>
@@ -562,7 +589,8 @@ function adminToday() {
           <span class="avatar sm" data-color="${esc(b.child.color)}">${esc(initials(b.child.name))}</span>
           <div>
             <div style="font-size:15px;font-weight:500">${esc(b.child.name)}</div>
-            <div class="meta mono" style="font-size:10.5px;color:var(--muted)">${done}/${b.tasks.length} done today</div>
+            <div class="meta mono" style="font-size:10.5px;color:var(--muted)">${done}/${b.tasks.length} done today${
+              b.streak > 0 ? " · " + b.streak + " day streak" : ""}</div>
           </div>
         </div>
         <div style="text-align:right">
@@ -580,6 +608,7 @@ function adminToday() {
             ${statusChip(t)}
             ${t.status === "awaiting" ? `<button class="btn small accent" data-act="approve" data-key="${t.key}">Check off</button>` : ""}
             ${t.status !== "done" && t.status !== "awaiting" ? `<button class="btn small quiet" data-act="excuse" data-key="${t.key}">Excuse</button>` : ""}
+            ${t.status === "done" ? `<button class="btn small quiet" data-act="undo" data-key="${t.key}">Undo</button>` : ""}
           </div>
         </div>
       </div>`).join("") + `</div>` : `<p class="empty">No tasks scheduled today.</p>`}
@@ -657,7 +686,18 @@ function adminTasks() {
             <input class="field" id="f-pts" type="number" min="0" max="500" value="${f.points}"></div>
         </div>
         ${f.type === "chore" ? `<div class="meta">No set length. The child runs a timer while they work and taps done when they're finished; you check it off from the queue.</div>` : ""}
-        <div>
+        <div class="spread" style="gap:8px">
+          <label class="lab" style="margin:0">Repeats</label>
+          <div class="row" style="gap:6px">
+            <button type="button" class="btn small ${f.onceOn ? "" : "accent on"}" data-act="repeatMode" data-m="weekly">Weekly</button>
+            <button type="button" class="btn small ${f.onceOn ? "accent on" : ""}" data-act="repeatMode" data-m="once">One-off</button>
+          </div>
+        </div>
+        ${f.onceOn ? `<div>
+          <label class="lab" for="f-once">Date</label>
+          <input class="field" id="f-once" type="date" value="${esc(f.onceOn)}">
+          <div class="meta" style="margin-top:6px">Appears on this day only, then retires itself.</div>
+        </div>` : `<div>
           <div class="spread" style="margin-bottom:6px">
             <label class="lab" style="margin:0">Days</label>
             <div class="row" style="gap:6px">
@@ -667,7 +707,7 @@ function adminTasks() {
           </div>
           ${dayChips(f.days)}
           ${f.days.length ? "" : `<div class="meta" style="margin-top:8px;color:var(--warn)">No days selected — pick at least one before saving.</div>`}
-        </div>
+        </div>`}
         <div class="row" style="justify-content:flex-end;margin-top:4px">
           ${f.id ? `<button class="btn quiet small" data-act="cancelForm">Cancel</button>` : ""}
           <button class="btn accent" data-act="saveTask">${f.id ? "Save changes" : "Add task"}</button>
@@ -682,7 +722,8 @@ function adminTasks() {
           <div class="spread">
             <div>
               <h3>${esc(t.title)}</h3>
-              <div class="meta">${t.type === "chore" ? "no set time" : t.durationMin + " min"} · ${t.points} pts · ${t.days.length === 7 ? "daily" : t.days.map(d => DAYS[d]).join("")}</div>
+              <div class="meta">${t.type === "chore" ? "no set time" : t.durationMin + " min"} · ${t.points} pts · ${
+                t.onceOn ? "once on " + t.onceOn : t.days.length === 7 ? "daily" : t.days.map(d => DAYS[d]).join("")}</div>
             </div>
             <div class="row">
               <button class="btn small quiet" data-act="editTask" data-id="${t.id}">Edit</button>
@@ -903,6 +944,58 @@ setInterval(tick, 250);
 setInterval(() => { if (S.state) refresh(true); }, 6000);
 
 
+
+/* ---------- completion signal ---------- */
+
+// The audio context is created on a tap (starting a timer), so browsers allow
+// it to make noise later when the timer actually finishes.
+let audio = null;
+const chimed = new Set();
+
+function wakeAudio() {
+  if (audio || typeof window.AudioContext !== "function" && typeof window.webkitAudioContext !== "function") return;
+  try {
+    audio = new (window.AudioContext || window.webkitAudioContext)();
+  } catch (err) {
+    audio = null;
+  }
+}
+
+function chime() {
+  if (audio && audio.state === "suspended") audio.resume();
+  if (audio) {
+    // Two soft notes a fifth apart, short enough not to startle anyone.
+    [[660, 0], [990, 0.16]].forEach(([freq, delay]) => {
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const t = audio.currentTime + delay;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+      osc.connect(gain).connect(audio.destination);
+      osc.start(t);
+      osc.stop(t + 0.6);
+    });
+  }
+  if (navigator.vibrate) navigator.vibrate([90, 60, 90]);
+}
+
+function notifyFinished(tasks) {
+  for (const t of tasks) {
+    const key = t.key || t.id;
+    if (t.status === "done" || t.status === "awaiting") {
+      if (chimed.has(key) === false && chimed.has("seen:" + key)) chime();
+      chimed.add("seen:" + key);
+      chimed.add(key);
+    } else {
+      chimed.add("seen:" + key);
+      chimed.delete(key);
+    }
+  }
+}
+
 /* ---------- parallax ---------- */
 
 // Pointer drives the tilt; untouched cards drift on their own so the grid
@@ -988,7 +1081,7 @@ root.addEventListener("click", async e => {
         await post("logout"); S.state = null; S.pick = null; S.view = "login";
         S.profiles = (await get("profiles")).profiles; return render();
 
-      case "open": S.focus = node.dataset.id; {
+      case "open": wakeAudio(); S.focus = node.dataset.id; {
         const t = taskById(S.focus);
         render();
         if (t && !t.running && t.status !== "done" && t.status !== "awaiting") {
@@ -1000,10 +1093,11 @@ root.addEventListener("click", async e => {
         setState(await post("submit", { taskId: node.dataset.id }));
         S.focus = null;
         toast("Sent to a parent to check off"); return;
-      case "start": setState(await post("start", { taskId: node.dataset.id })); return render();
+      case "start": wakeAudio(); setState(await post("start", { taskId: node.dataset.id })); return render();
       case "pause": setState(await post("pause", { taskId: node.dataset.id })); return render();
 
       case "approve": setState(await post("approve", { key: node.dataset.key })); toast("Checked off"); return;
+      case "undo": setState(await post("undo", { key: node.dataset.key })); toast("Undone"); return;
       case "reject": setState(await post("reject", { key: node.dataset.key })); toast("Sent back"); return;
       case "excuse":
         if (!confirm("Mark this done without points?")) return;
@@ -1017,6 +1111,12 @@ root.addEventListener("click", async e => {
       case "fulfill": setState(await post("fulfill", { id: node.dataset.id })); toast("Marked as given"); return;
       case "denyRedemption": setState(await post("denyRedemption", { id: node.dataset.id })); toast("Points refunded"); return;
 
+      case "repeatMode": {
+        const f = formState("task", { days: [0, 1, 2, 3, 4, 5, 6] });
+        readTaskForm(f);
+        f.onceOn = node.dataset.m === "once" ? (S.state.date || "") : null;
+        return render();
+      }
       case "allDays": {
         const f = formState("task", { days: [] });
         readTaskForm(f);
@@ -1062,7 +1162,8 @@ root.addEventListener("click", async e => {
       case "saveTask": {
         const f = formState("task", { id: "", days: [0, 1, 2, 3, 4, 5, 6] });
         readTaskForm(f);
-        if (!f.days.length) return toast("Pick at least one day.");
+        if (!f.onceOn && !f.days.length) return toast("Pick at least one day.");
+        if (f.onceOn && !/^\d{4}-\d{2}-\d{2}$/.test(f.onceOn)) return toast("Pick a date for the one-off.");
         setState(await post("saveTask", f));
         S.form = null; toast(f.id ? "Task updated" : "Task added"); return;
       }
@@ -1111,6 +1212,9 @@ function readTaskForm(f) {
     f.childId = val("f-child");
     f.points = +val("f-pts");
     if (el("#f-dur")) f.durationMin = +val("f-dur");
+    // Only read the date while the form is actually in one-off mode, or the
+    // capture that runs before every render undoes a switch back to weekly.
+    if (el("#f-once") && f.onceOn) f.onceOn = val("f-once");
   }
   // An empty selection stays empty — clearing the days is a legitimate step
   // on the way to picking one, not a signal to select them all.

@@ -55,6 +55,12 @@ These are enforced on the server, not in the browser, so they hold even if a chi
 
 Parents get one deliberate override: **Excuse**, which closes out a task without awarding points — for the day someone is sick or away.
 
+Tasks repeat by weekday, or can be **one-off**: pick a date and it appears that day only. Useful for "help unload the car" without leaving a permanent task behind.
+
+Parents also get **Undo** on anything already checked off, which takes the points back and returns a chore to the queue.
+
+When a study timer runs out the device plays a short chime and vibrates, so a phone face-down on the table still tells the child they're done.
+
 ## Points: allowance and savings
 
 Every child has two balances, and the difference is the whole point.
@@ -85,6 +91,32 @@ The ±5 buttons in the Family tab adjust **savings**, not allowance, so a manual
 ## Day handling
 
 Tasks are recurring and scheduled by weekday. Progress is stored per calendar day, so everything resets at local midnight and past days stay in `data.json` as a record.
+
+## If a parent forgets their PIN
+
+PINs are stored as hashes, so there's nothing to look up — only to replace, from the machine running the container.
+
+```bash
+sudo docker exec hearth node server.js --list-users
+sudo docker exec hearth node server.js --reset-pin Parent 4821
+```
+
+Names work if they're unique; otherwise pass the id shown by `--list-users`. Resetting signs that account out everywhere, so an old session can't linger.
+
+Since this needs shell access to the Docker host, it's a real recovery route without being a back door.
+
+## Signing in
+
+The PIN pad locks an account after five wrong attempts, for a minute, doubling if someone keeps going. Other accounts are unaffected — one child guessing at a parent's PIN can't lock everyone else out. Locks live in memory and clear on restart.
+
+## History and streaks
+
+Every completed task is recorded per day, so the app remembers. Children see a seven-day strip on their Today tab and a running streak; parents see each child's streak on the board, and can pull up to 90 days per child.
+
+A streak counts back from today over days where everything scheduled got done. Two deliberate choices: a day with nothing scheduled is skipped rather than treated as a failure, so a rest day doesn't cost a child their momentum; and today only counts once it's actually finished, so nobody watches their streak break at breakfast.
+
+Day records are rebuilt from the logs rather than stored, so editing or deleting a task doesn't corrupt the past.
+
 
 ## Data and backups
 

@@ -66,7 +66,7 @@ function seed() {
 
   const task = (childId, title, type, durationMin, points) => ({
     id: id("t"), childId, title, type, durationMin, points,
-    days: [0, 1, 2, 3, 4, 5, 6], active: true,
+    days: [0, 1, 2, 3, 4, 5, 6], active: true, onceOn: null, createdAt: null,
   });
 
   return {
@@ -104,6 +104,10 @@ function migrate() {
   }
   for (const t of db.tasks || []) {
     if (t.type === "chore" && t.durationMin !== null) t.durationMin = null;
+    if (t.onceOn === undefined) t.onceOn = null;
+    // Tasks that predate this field count as always having existed, so old
+    // history isn't retroactively marked incomplete.
+    if (t.createdAt === undefined) t.createdAt = null;
   }
   // Log keys used to be date:taskId. They now carry the child, since a task
   // can belong to everyone.
@@ -165,6 +169,30 @@ function save(now) {
 
 const sessions = new Map();
 const DAY = 86400000;
+
+// A 4-digit PIN is 10,000 guesses. Without a delay a script walks them in
+// under a minute, which matters now that Hearth can be reached from outside.
+const attempts = new Map();
+const MAX_ATTEMPTS = 5;
+const LOCK_MS = 60000;
+
+function lockStatus(key) {
+  const rec = attempts.get(key);
+  if (!rec) return 0;
+  if (rec.until && rec.until > Date.now()) return Math.ceil((rec.until - Date.now()) / 1000);
+  if (rec.until && rec.until <= Date.now()) attempts.delete(key);
+  return 0;
+}
+
+function noteFailure(key) {
+  const rec = attempts.get(key) || { count: 0, until: 0 };
+  rec.count++;
+  if (rec.count >= MAX_ATTEMPTS) {
+    // Each further run of failures locks for longer.
+    rec.until = Date.now() + LOCK_MS * Math.pow(2, Math.min(4, Math.floor(rec.count / MAX_ATTEMPTS) - 1));
+  }
+  attempts.set(key, rec);
+}
 
 function loadSessions() {
   for (const [token, s] of Object.entries(db.sessions || {})) {
@@ -299,14 +327,21 @@ function award(childId, points, log) {
   if (log) log.awardedPoints = points;
 }
 
+function scheduledOn(task, date, day) {
+  if (task.createdAt && task.createdAt > date) return false;
+  if (task.onceOn) return task.onceOn === date;
+  return task.days.includes(day);
+}
+
 function tasksFor(childId, date, day) {
   return db.tasks
-    .filter(t => (t.childId === childId || t.childId === SHARED) && t.active !== false && t.days.includes(day))
+    .filter(t => (t.childId === childId || t.childId === SHARED) && t.active !== false && scheduledOn(t, date, day))
     .map(t => {
       const log = settle(getLog(t, date, childId), t);
       return {
         id: t.id, title: t.title, type: t.type, durationMin: t.durationMin,
         points: t.points, days: t.days, childId: t.childId, shared: t.childId === SHARED,
+        onceOn: t.onceOn || null,
         status: log.status, elapsedMs: elapsedMs(log), running: log.status === "running",
         awardedPoints: log.awardedPoints, key: log.key,
       };
@@ -346,6 +381,8 @@ function stateFor(user) {
       date,
       tasks,
       rewards: rewardsFor(user.id),
+      week: historyFor(user.id, 7),
+      streak: streakFor(user.id),
       redemptions: db.redemptions
         .filter(r => r.childId === user.id)
         .slice(-12).reverse()
@@ -355,7 +392,7 @@ function stateFor(user) {
 
   const board = children.map(c => {
     const tasks = tasksFor(c.id, date, day);
-    return { child: publicUser(c), tasks };
+    return { child: publicUser(c), tasks, streak: streakFor(c.id), week: historyFor(c.id, 7) };
   });
 
   return {
@@ -379,6 +416,63 @@ function stateFor(user) {
         rewardTitle: (db.rewards.find(x => x.id === r.rewardId) || {}).title || "Reward",
       })),
   };
+}
+
+
+/* ---------- history ---------- */
+
+function shiftDate(date, delta) {
+  const d = new Date(date + "T12:00:00");
+  d.setDate(d.getDate() + delta);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function dayOfDate(date) {
+  return new Date(date + "T12:00:00").getDay();
+}
+
+// A day's record is rebuilt from the logs rather than stored, so it stays
+// correct if a task is edited or removed later.
+function dayRecord(childId, date) {
+  const day = dayOfDate(date);
+  const scheduled = db.tasks.filter(t =>
+    (t.childId === childId || t.childId === SHARED) && t.active !== false && scheduledOn(t, date, day));
+
+  let done = 0, points = 0;
+  for (const t of scheduled) {
+    const log = db.logs[logKey(t.id, date, childId)];
+    if (log && log.status === "done") { done++; points += log.awardedPoints || 0; }
+  }
+  return { date, total: scheduled.length, done, points };
+}
+
+function historyFor(childId, days) {
+  const out = [];
+  let date = today();
+  for (let i = 0; i < days; i++) {
+    out.push(dayRecord(childId, date));
+    date = shiftDate(date, -1);
+  }
+  return out.reverse();
+}
+
+// A day with nothing scheduled doesn't extend a streak but doesn't break one
+// either — a rest day shouldn't cost a child nine days of momentum. Today only
+// counts once it's actually finished, so a streak isn't broken at breakfast.
+function streakFor(childId) {
+  let streak = 0;
+  let date = today();
+  const now = dayRecord(childId, date);
+  if (!(now.total > 0 && now.done >= now.total)) date = shiftDate(date, -1);
+
+  for (let i = 0; i < 400; i++) {
+    const rec = dayRecord(childId, date);
+    if (rec.total === 0) { date = shiftDate(date, -1); continue; }
+    if (rec.done < rec.total) break;
+    streak++;
+    date = shiftDate(date, -1);
+  }
+  return streak;
 }
 
 /* ---------- http plumbing ---------- */
@@ -448,10 +542,24 @@ async function api(req, res, route) {
   }
 
   if (route === "login" && req.method === "POST") {
+    const key = String(body.userId || "?");
+    const wait = lockStatus(key);
+    if (wait) {
+      return json(res, 429, {
+        error: `Too many tries. Wait ${wait > 60 ? Math.ceil(wait / 60) + " minutes" : wait + " seconds"} and try again.`,
+      });
+    }
     const target = db.users.find(u => u.id === body.userId);
     if (!target || !checkSecret(body.pin, target.secret)) {
-      return json(res, 401, { error: "That PIN doesn't match. Try again." });
+      noteFailure(key);
+      const left = MAX_ATTEMPTS - (attempts.get(key) || { count: 0 }).count;
+      return json(res, 401, {
+        error: left > 0 && left <= 2
+          ? `That PIN doesn't match. ${left} ${left === 1 ? "try" : "tries"} left.`
+          : "That PIN doesn't match. Try again.",
+      });
     }
+    attempts.delete(key);
     const token = newSession(target.id);
     return json(res, 200, { user: publicUser(target) }, {
       "Set-Cookie": `sid=${token}; HttpOnly; Path=/; Max-Age=${30 * DAY / 1000}; SameSite=Lax`,
@@ -471,6 +579,21 @@ async function api(req, res, route) {
   const deny = () => json(res, 403, { error: "Only a parent can do that." });
 
   if (route === "state") return json(res, 200, stateFor(user));
+
+  if (route === "history") {
+    const childId = user.role === "child" ? user.id : str(body.childId, 40);
+    if (user.role === "child" && body.childId && body.childId !== user.id) {
+      return json(res, 403, { error: "That isn't your history." });
+    }
+    const child = db.users.find(u => u.id === childId && u.role === "child");
+    if (!child) return json(res, 404, { error: "Child not found." });
+    return json(res, 200, {
+      childId,
+      name: child.name,
+      streak: streakFor(childId),
+      days: historyFor(childId, num(body.days, 7, 90, 30)),
+    });
+  }
 
   /* --- timer control (children only, on their own tasks) --- */
 
@@ -541,6 +664,28 @@ async function api(req, res, route) {
     return json(res, 200, stateFor(user));
   }
 
+  if (route === "undo") {
+    if (!isAdmin) return deny();
+    const log = db.logs[body.key];
+    if (!log || log.status !== "done") return json(res, 409, { error: "Nothing to undo." });
+    const task = db.tasks.find(t => t.id === log.taskId);
+    const child = db.users.find(u => u.id === log.childId);
+    if (child && log.awardedPoints) child.earned = Math.max(0, child.earned - log.awardedPoints);
+    log.awardedPoints = 0;
+    log.approvedBy = null;
+    log.completedAt = null;
+    // A chore goes back to the queue. A study block already served its time,
+    // so it returns to paused with the clock it had rather than to zero.
+    if (task && task.type === "chore") {
+      log.status = "awaiting";
+    } else {
+      log.status = "paused";
+      if (task && task.durationMin) log.accumulatedMs = task.durationMin * 60000;
+    }
+    save();
+    return json(res, 200, stateFor(user));
+  }
+
   if (route === "excuse") {
     if (!isAdmin) return deny();
     const log = db.logs[body.key];
@@ -567,9 +712,11 @@ async function api(req, res, route) {
     if (!isAdmin) return deny();
     const title = str(body.title, 60);
     if (!title) return json(res, 400, { error: "Give the task a name." });
+    // A one-off carries a date instead of a weekday pattern.
+    const once = /^\d{4}-\d{2}-\d{2}$/.test(String(body.onceOn || "")) ? body.onceOn : null;
     // An explicitly empty list is a mistake worth reporting; a missing one
     // just means "every day".
-    if (Array.isArray(body.days) && !body.days.length) {
+    if (!once && Array.isArray(body.days) && !body.days.length) {
       return json(res, 400, { error: "Pick at least one day." });
     }
     const days = Array.isArray(body.days)
@@ -583,6 +730,7 @@ async function api(req, res, route) {
       durationMin: type === "chore" ? null : num(body.durationMin, 1, 240, 15),
       points: num(body.points, 0, 500, 10),
       days,
+      onceOn: once,
     };
     const existing = db.tasks.find(t => t.id === body.id);
     if (existing) {
@@ -596,7 +744,7 @@ async function api(req, res, route) {
       if (!forAll && !db.users.some(u => u.id === body.childId && u.role === "child")) {
         return json(res, 400, { error: "Pick a child for this task." });
       }
-      db.tasks.push(Object.assign({ id: id("t"), childId: body.childId, active: true }, fields));
+      db.tasks.push(Object.assign({ id: id("t"), childId: body.childId, active: true, createdAt: today() }, fields));
     }
     save();
     return json(res, 200, stateFor(user));
@@ -738,8 +886,63 @@ async function api(req, res, route) {
 
 /* ---------- server ---------- */
 
+
+/* ---------- command line ---------- */
+
+// PINs are hashed, so a forgotten one can't be recovered — only replaced, by
+// someone with access to the container. That's the recovery path.
+function runCommand(argv) {
+  const cmd = argv[2];
+
+  if (cmd === "--list-users") {
+    console.log("\n  Everyone in this Hearth:\n");
+    for (const u of db.users) {
+      console.log(`    ${u.name.padEnd(18)} ${u.role.padEnd(7)} ${u.id}`);
+    }
+    console.log("");
+    return true;
+  }
+
+  if (cmd === "--reset-pin") {
+    const who = argv[3];
+    const pin = argv[4];
+    if (!who || !pin) {
+      console.error("\n  Usage: node server.js --reset-pin <name-or-id> <new-pin>\n");
+      process.exit(1);
+    }
+    if (String(pin).length < 4) {
+      console.error("\n  A PIN needs at least 4 characters.\n");
+      process.exit(1);
+    }
+    const lower = String(who).toLowerCase();
+    const matches = db.users.filter(u => u.id === who || u.name.toLowerCase() === lower);
+    if (!matches.length) {
+      console.error(`\n  No one here called "${who}". Try --list-users.\n`);
+      process.exit(1);
+    }
+    if (matches.length > 1) {
+      console.error(`\n  More than one person called "${who}". Use the id instead:`);
+      matches.forEach(u => console.error(`    ${u.name}  ${u.id}`));
+      console.error("");
+      process.exit(1);
+    }
+    const target = matches[0];
+    target.secret = makeSecret(pin);
+    // Any existing sessions for that account are no longer trustworthy.
+    for (const [token, sess] of sessions) if (sess.userId === target.id) sessions.delete(token);
+    persistSessions();
+    save(true);
+    console.log(`\n  PIN reset for ${target.name} (${target.role}). Sign in with the new one.\n`);
+    return true;
+  }
+
+  return false;
+}
+
 load();
 loadSessions();
+
+if (runCommand(process.argv)) process.exit(0);
 setInterval(() => {
   // Settle any timers that ran out while nobody was looking.
   const date = today();

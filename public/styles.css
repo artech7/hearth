@@ -451,3 +451,33 @@ label.lab { display: block; font-size: 12.5px; color: var(--muted); margin-botto
 }
 .rcard.preview .rcard-body { padding: 14px; }
 .rcard.preview .rcard-body h3 { font-size: 15px; }
+
+/* ---- week strip ---- */
+
+.week { display: flex; justify-content: space-between; gap: 6px; }
+
+.wday {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.wday .dot {
+  width: 100%;
+  height: 26px;
+  border-radius: 9px;
+  box-shadow: var(--in-sm);
+}
+
+.wday .lbl {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+
+.wday.full .dot { background: var(--accent); box-shadow: var(--out-xs); }
+.wday.part .dot { background: var(--track); box-shadow: var(--out-xs); }
+.wday.rest .dot { opacity: .45; }
