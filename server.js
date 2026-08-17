@@ -98,6 +98,9 @@ function migrate() {
     if (u.allowanceWeek === undefined) u.allowanceWeek = null;
     delete u.points;
   }
+  for (const t of db.tasks || []) {
+    if (t.type === "chore" && t.durationMin !== null) t.durationMin = null;
+  }
   for (const r of db.redemptions || []) {
     if (r.fromAllowance === undefined) { r.fromAllowance = 0; r.fromEarned = r.cost; }
   }
@@ -251,6 +254,8 @@ function elapsedMs(log) {
 // timer has run out.
 function settle(log, task) {
   if (log.status !== "running") return log;
+  // Chores are open-ended: they finish when the child says so, not on a clock.
+  if (task.type === "chore") return log;
   const requiredMs = task.durationMin * 60000;
   if (elapsedMs(log) < requiredMs) return log;
 
@@ -473,6 +478,24 @@ async function api(req, res, route) {
     return json(res, 200, stateFor(user));
   }
 
+  if (route === "submit") {
+    const task = db.tasks.find(t => t.id === body.taskId);
+    if (!task) return json(res, 404, { error: "Task not found." });
+    if (user.role !== "child" || task.childId !== user.id) return json(res, 403, { error: "That isn't your task." });
+    if (task.type !== "chore") return json(res, 400, { error: "Study blocks finish on their own timer." });
+
+    const log = getLog(task, today());
+    if (log.status !== "running" && log.status !== "paused") {
+      return json(res, 409, { error: "Start it before marking it done." });
+    }
+    log.accumulatedMs = elapsedMs(log);
+    log.startedAt = null;
+    log.status = "awaiting";
+    log.completedAt = Date.now();
+    save();
+    return json(res, 200, stateFor(user));
+  }
+
   /* --- admin actions --- */
 
   if (route === "approve") {
@@ -527,10 +550,12 @@ async function api(req, res, route) {
     if (!title) return json(res, 400, { error: "Give the task a name." });
     const days = Array.isArray(body.days) && body.days.length
       ? body.days.map(d => num(d, 0, 6, 0)) : [0, 1, 2, 3, 4, 5, 6];
+    const type = body.type === "chore" ? "chore" : "study";
     const fields = {
       title,
-      type: body.type === "chore" ? "chore" : "study",
-      durationMin: num(body.durationMin, 1, 240, 15),
+      type,
+      // Chores have no set length; only study blocks run against a clock.
+      durationMin: type === "chore" ? null : num(body.durationMin, 1, 240, 15),
       points: num(body.points, 0, 500, 10),
       days,
     };

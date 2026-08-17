@@ -3,22 +3,20 @@ name: hearth
 services:
   hearth:
     image: ghcr.io/artech7/hearth:latest
-    # Always fetch from the registry on up/update rather than reusing whatever
-    # tag is cached locally.
+    # Always fetch from the registry so Dockhand's "update image" really
+    # replaces the container instead of reusing a cached tag.
     pull_policy: always
     container_name: hearth
     init: true
     restart: unless-stopped
     stop_grace_period: 15s
     ports:
-      # Host port is yours to pick. The container always listens on 8080.
+      # Host port : container port. The container always listens on 8080.
       - "58422:8080"
     environment:
+      # Daily resets and weekly allowance renewal follow this clock.
       TZ: America/Denver
     volumes:
-      # A directory of its own, not the folder holding the source files.
-      #   sudo mkdir -p /volume1/docker/hearth/data
-      #   sudo chown -R 1000:1000 /volume1/docker/hearth/data
       - /volume1/docker/hearth/data:/data
     read_only: true
     tmpfs:

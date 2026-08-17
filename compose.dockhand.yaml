@@ -1,23 +1,25 @@
 name: hearth
 
-# For Dockhand internal stacks. Dockhand keeps pasted YAML in its own database,
-# so there is no source tree on the host to build from — build and tag the image
-# once on the Docker host first (see README), then deploy this.
-
 services:
   hearth:
-    image: hearth:latest
+    image: ghcr.io/artech7/hearth:latest
+    # Always fetch from the registry rather than reusing a cached tag, so
+    # Dockhand's "update image" actually replaces the running container.
+    pull_policy: always
     container_name: hearth
     init: true
     restart: unless-stopped
     stop_grace_period: 15s
     ports:
-      - "${HEARTH_PORT:-8080}:8080"
+      # Host port : container port. The container always listens on 8080.
+      - "58422:8080"
     environment:
-      TZ: ${TZ:-America/Denver}
+      # Daily task resets and weekly allowance renewal follow this clock.
+      TZ: America/Denver
     volumes:
+      # This MUST match what your running stack already uses, or the app
+      # starts against an empty data file.
       - hearth-data:/data
-    # The app writes nothing but DATA_FILE, so everything else can be read-only.
     read_only: true
     tmpfs:
       - /tmp
