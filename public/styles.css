@@ -298,3 +298,103 @@ label.lab { display: block; font-size: 12.5px; color: var(--muted); margin-botto
 .theme:hover { color: var(--ink); }
 .theme:active { box-shadow: var(--in-sm); }
 .theme svg { width: 16px; height: 16px; fill: currentColor; }
+
+/* ---- reward cards: layered parallax scenes ---- */
+
+.reward-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.rcard {
+  position: relative;
+  aspect-ratio: 350 / 500;
+  perspective: 1000px;
+  overflow: hidden;
+  border-radius: 26px;
+  background: #1B2320;
+  box-shadow: var(--out);
+  isolation: isolate;
+}
+
+.player {
+  position: absolute;
+  inset: -14%;
+  transform-origin: center;
+  will-change: transform;
+  transition: transform 420ms cubic-bezier(.22,.9,.3,1);
+}
+.rcard.live .player { transition: transform 90ms linear; }
+
+.player svg { width: 100%; height: 100%; display: block; }
+
+.player:nth-child(1) { z-index: 0; filter: blur(5px); }
+.player:nth-child(2) { z-index: 1; filter: blur(3px); }
+.player:nth-child(3) { z-index: 2; filter: blur(2px); }
+.player:nth-child(4) { z-index: 3; }
+.player:nth-child(5) { z-index: 4; filter: blur(2px); }
+.player:nth-child(6) { z-index: 5; filter: blur(3px); }
+.player:nth-child(7) { z-index: 6; filter: blur(5px); }
+
+/* Keeps the text legible over whatever the scene does. */
+.rcard::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  background: linear-gradient(to top, rgba(12,18,15,.88) 0%, rgba(12,18,15,.45) 34%, rgba(12,18,15,0) 62%);
+  pointer-events: none;
+}
+
+.rcard-body {
+  position: absolute;
+  z-index: 10;
+  left: 0; right: 0; bottom: 0;
+  padding: 18px 18px 16px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rcard-body h3 {
+  margin: 0 0 5px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #F2F6F0;
+  text-shadow: 0 1px 10px rgba(0,0,0,.6);
+}
+
+.rcard-body .cost {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .07em;
+  color: #C8D2C6;
+}
+
+.rcard-redeem {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 13px;
+  padding: 10px 15px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #2A2013;
+  background: #D8A24E;
+  box-shadow: 0 5px 16px rgba(0,0,0,.45);
+  transition: transform 140ms ease, background 140ms ease;
+}
+.rcard-redeem:hover { background: #E4B36A; }
+.rcard-redeem:active { transform: translateY(1px); }
+.rcard-redeem[disabled] {
+  background: rgba(226,232,224,.16);
+  color: #C0CABE;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player { transition: none; transform: none !important; }
+}

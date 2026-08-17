@@ -199,6 +199,121 @@ async function submitPin() {
   }
 }
 
+
+/* ---------- reward scenes ---------- */
+
+// Each reward gets a scene generated from its own name, so a reward added
+// later gets its own artwork without anyone drawing anything.
+function seedFrom(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function makeRng(seed) {
+  let s = seed || 1;
+  return () => {
+    s ^= s << 13; s >>>= 0;
+    s ^= s >> 17;
+    s ^= s << 5; s >>>= 0;
+    return s / 4294967296;
+  };
+}
+
+const SKIES = [
+  ["#12305C", "#2E5E7E"], ["#1B2E4A", "#4A5F78"], ["#241F४A".replace("४", "4"), "#5B4A72"],
+  ["#0F2E3A", "#356A63"], ["#2A1E38", "#6B4763"], ["#13263A", "#3E6B84"],
+];
+
+function ridge(rand, baseY, height, jag, width) {
+  const step = width / 9;
+  let d = `M0 ${baseY + height}`;
+  let x = 0;
+  d += ` L0 ${baseY - rand() * height * 0.3}`;
+  while (x < width) {
+    x += step;
+    const peak = baseY - (0.35 + rand() * jag) * height;
+    d += ` L${(x - step / 2).toFixed(1)} ${peak.toFixed(1)} L${x.toFixed(1)} ${(baseY - rand() * height * 0.35).toFixed(1)}`;
+  }
+  return d + ` L${width} ${baseY + height} Z`;
+}
+
+function trees(rand, count, baseY, size, width, fill) {
+  let out = "";
+  for (let i = 0; i < count; i++) {
+    const x = rand() * width;
+    const h = size * (0.7 + rand() * 0.6);
+    const w = h * 0.42;
+    out += `<path d="M${x.toFixed(1)} ${(baseY - h).toFixed(1)}
+      L${(x + w).toFixed(1)} ${baseY} L${(x - w).toFixed(1)} ${baseY} Z" fill="${fill}"/>`;
+    out += `<rect x="${(x - w * 0.11).toFixed(1)}" y="${(baseY - 2).toFixed(1)}"
+      width="${(w * 0.22).toFixed(1)}" height="${(h * 0.16).toFixed(1)}" fill="${fill}"/>`;
+  }
+  return out;
+}
+
+function svgLayer(inner, w, h) {
+  return `<div class="player"><svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid slice">${inner}</svg></div>`;
+}
+
+function rewardScene(title, uid) {
+  const rand = makeRng(seedFrom(title));
+  const W = 360, H = 520;
+  // Gradient ids share one document across the whole grid, so they have to be
+  // unique per card or every card renders with the first card's sky.
+  const gid = "s" + (uid || seedFrom(title).toString(36));
+  const sky = SKIES[Math.floor(rand() * SKIES.length)];
+  const layers = [];
+
+  // 1 — sky, moon, stars
+  let stars = "";
+  for (let i = 0; i < 40; i++) {
+    stars += `<circle cx="${(rand() * W).toFixed(1)}" cy="${(rand() * H * 0.55).toFixed(1)}"
+      r="${(0.5 + rand() * 1.4).toFixed(2)}" fill="#F4F8F2" opacity="${(0.25 + rand() * 0.6).toFixed(2)}"/>`;
+  }
+  layers.push(svgLayer(`
+    <defs><linearGradient id="sky-${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${sky[0]}"/><stop offset="1" stop-color="${sky[1]}"/>
+    </linearGradient></defs>
+    <rect width="${W}" height="${H}" fill="url(#sky-${gid})"/>
+    ${stars}
+    <circle cx="${(60 + rand() * 240).toFixed(0)}" cy="${(60 + rand() * 70).toFixed(0)}"
+      r="${(16 + rand() * 12).toFixed(0)}" fill="#EDF2E8" opacity=".82"/>`, W, H));
+
+  // 2 — far peaks
+  layers.push(svgLayer(`<path d="${ridge(rand, 300, 150, 0.55, W)}" fill="#2C4258" opacity=".85"/>`, W, H));
+
+  // 3 — nearer ridge
+  layers.push(svgLayer(`<path d="${ridge(rand, 340, 120, 0.5, W)}" fill="#22323F"/>`, W, H));
+
+  // 4 — the hall, lit from within
+  const hx = 120 + rand() * 120;
+  layers.push(svgLayer(`
+    <defs><radialGradient id="glow-${gid}">
+      <stop offset="0" stop-color="#E9A94A" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#E9A94A" stop-opacity="0"/>
+    </radialGradient></defs>
+    <circle cx="${hx}" cy="392" r="86" fill="url(#glow-${gid})"/>
+    <path d="M${hx - 62} 404 L${hx} 344 L${hx + 62} 404 Z" fill="#16211C"/>
+    <path d="M${hx - 62} 404 L${hx + 62} 404 L${hx + 62} 424 L${hx - 62} 424 Z" fill="#16211C"/>
+    <path d="M${hx - 14} 348 L${hx + 6} 330 M${hx + 14} 348 L${hx - 6} 330"
+      stroke="#16211C" stroke-width="5" stroke-linecap="round"/>
+    <path d="M${hx} 372 C${hx + 8} 384 ${hx + 13} 389 ${hx + 13} 397
+      A13 13 0 0 1 ${hx - 13} 397 C${hx - 13} 388 ${hx - 5} 384 ${hx} 372 Z" fill="#F0B45B"/>`, W, H));
+
+  // 5–7 — the near bank, closing in
+  layers.push(svgLayer(`<path d="${ridge(rand, 430, 70, 0.4, W)}" fill="#16211C"/>
+    ${trees(rand, 7, 438, 54, W, "#111A16")}`, W, H));
+  layers.push(svgLayer(trees(rand, 5, 486, 78, W, "#0D1512"), W, H));
+  layers.push(svgLayer(`<path d="M0 ${H} L0 500 Q ${W / 2} 470 ${W} 505 L${W} ${H} Z" fill="#0A100D"/>
+    ${trees(rand, 3, 528, 104, W, "#080D0B")}`, W, H));
+
+  return layers.join("");
+}
+
 /* ---------- child ---------- */
 
 function statusChip(t) {
@@ -316,15 +431,16 @@ function childRewards() {
   const st = S.state;
   return `
     ${balanceCard(st.me)}
-    ${st.rewards.length ? `<div class="cards">` + st.rewards.map(r => {
+    ${st.rewards.length ? `<div class="reward-grid">` + st.rewards.map(r => {
       const afford = st.me.points >= r.cost;
-      return `<div class="card">
-        <div class="spread">
-          <div>
+      return `<div class="rcard" data-scene="${esc(r.id)}">
+        ${rewardScene(r.title + r.id, r.id.replace(/[^a-zA-Z0-9]/g, ""))}
+        <div class="rcard-body">
+          <div style="min-width:0">
             <h3>${esc(r.title)}</h3>
-            <div class="meta">${r.cost} points${afford ? "" : ` · ${r.cost - st.me.points} to go`}</div>
+            <div class="cost">${r.cost} POINTS${afford ? "" : ` · ${r.cost - st.me.points} TO GO`}</div>
           </div>
-          <button class="btn ${afford ? "accent" : ""}" data-act="redeem" data-id="${r.id}" ${afford ? "" : "disabled"}>Redeem</button>
+          <button class="rcard-redeem" data-act="redeem" data-id="${r.id}" ${afford ? "" : "disabled"}>Redeem</button>
         </div>
       </div>`;
     }).join("") + `</div>` : `<p class="empty">No rewards set up yet.</p>`}
@@ -746,6 +862,59 @@ async function refresh(silent) {
 
 setInterval(tick, 250);
 setInterval(() => { if (S.state) refresh(true); }, 6000);
+
+
+/* ---------- parallax ---------- */
+
+// Pointer drives the tilt; untouched cards drift on their own so the grid
+// isn't dead on a phone, where there's no pointer at all.
+const parallax = { hovered: null, phase: Math.random() * Math.PI * 2 };
+
+function tiltCard(card, x, y) {
+  const layers = card.querySelectorAll(".player");
+  const tiltY = (x - 0.5) * 22;
+  layers.forEach((layer, i) => {
+    const moveX = (x - 0.5) * i * 13;
+    const moveY = (y - 0.5) * i * 6;
+    layer.style.transform =
+      `translate(${moveX.toFixed(2)}px, ${moveY.toFixed(2)}px) rotateY(${tiltY.toFixed(2)}deg)`;
+  });
+}
+
+function driftFrame() {
+  if (!reducedMotion()) {
+    parallax.phase += 0.006;
+    const cards = document.querySelectorAll(".rcard");
+    cards.forEach((card, i) => {
+      if (card === parallax.hovered) return;
+      const x = Math.sin(parallax.phase + i * 0.7) * 0.5 + 0.5;
+      tiltCard(card, x, 0.5);
+    });
+  }
+  requestAnimationFrame(driftFrame);
+}
+
+function reducedMotion() {
+  return typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+if (typeof requestAnimationFrame === "function") requestAnimationFrame(driftFrame);
+
+root.addEventListener("pointermove", e => {
+  const card = e.target.closest(".rcard");
+  if (!card) return;
+  const rect = card.getBoundingClientRect();
+  parallax.hovered = card;
+  card.classList.add("live");
+  tiltCard(card, (e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
+});
+
+root.addEventListener("pointerleave", e => {
+  const card = e.target.closest && e.target.closest(".rcard");
+  if (card) card.classList.remove("live");
+  if (parallax.hovered === card) parallax.hovered = null;
+}, true);
 
 /* ---------- events ---------- */
 
