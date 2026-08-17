@@ -286,8 +286,8 @@ function childToday() {
         </div>
       </div>
     </div>
-    ${study.length ? `<h2 class="section-title">Studying</h2>${study.map(taskCard).join("")}` : ""}
-    ${chores.length ? `<h2 class="section-title">Chores</h2>${chores.map(taskCard).join("")}` : ""}`;
+    ${study.length ? `<h2 class="section-title">Studying</h2><div class="cards">${study.map(taskCard).join("")}</div>` : ""}
+    ${chores.length ? `<h2 class="section-title">Chores</h2><div class="cards">${chores.map(taskCard).join("")}</div>` : ""}`;
 }
 
 function balanceCard(me) {
@@ -316,7 +316,7 @@ function childRewards() {
   const st = S.state;
   return `
     ${balanceCard(st.me)}
-    ${st.rewards.length ? st.rewards.map(r => {
+    ${st.rewards.length ? `<div class="cards">` + st.rewards.map(r => {
       const afford = st.me.points >= r.cost;
       return `<div class="card">
         <div class="spread">
@@ -327,14 +327,14 @@ function childRewards() {
           <button class="btn ${afford ? "accent" : ""}" data-act="redeem" data-id="${r.id}" ${afford ? "" : "disabled"}>Redeem</button>
         </div>
       </div>`;
-    }).join("") : `<p class="empty">No rewards set up yet.</p>`}
+    }).join("") + `</div>` : `<p class="empty">No rewards set up yet.</p>`}
     ${st.redemptions.length ? `<h2 class="section-title">Your requests</h2>
-      ${st.redemptions.map(r => `<div class="card flat">
+      <div class="cards">${st.redemptions.map(r => `<div class="card flat">
         <div class="spread">
           <div><h3>${esc(r.rewardTitle)}</h3><div class="meta">${r.cost} pts</div></div>
           <span class="chip ${r.status === "fulfilled" ? "done" : r.status === "denied" ? "await" : ""}">${r.status}</span>
         </div>
-      </div>`).join("")}` : ""}`;
+      </div>`).join("")}</div>` : ""}`;
 }
 
 /* ---------- focus overlay ---------- */
@@ -419,9 +419,9 @@ function adminToday() {
   const st = S.state;
   if (!st.board.length) return `<p class="empty">Add a child in the Family tab to get started.</p>`;
 
-  return st.board.map(b => {
+  return `<div class="board">` + st.board.map(b => {
     const done = b.tasks.filter(t => t.status === "done").length;
-    return `<div style="margin-bottom:30px">
+    return `<div>
       <div class="spread" style="margin-bottom:12px">
         <div class="row">
           <span class="avatar sm" data-color="${esc(b.child.color)}">${esc(initials(b.child.name))}</span>
@@ -435,7 +435,7 @@ function adminToday() {
           <div class="meta mono" style="font-size:10px;color:var(--muted);margin-top:5px">${b.child.allowanceRemaining} allowance · ${b.child.earned} saved</div>
         </div>
       </div>
-      ${b.tasks.length ? b.tasks.map(t => `<div class="card flat">
+      ${b.tasks.length ? `<div class="cards">` + b.tasks.map(t => `<div class="card flat">
         <div class="spread">
           <div style="min-width:0">
             <h3>${esc(t.title)}</h3>
@@ -447,9 +447,9 @@ function adminToday() {
             ${t.status !== "done" && t.status !== "awaiting" ? `<button class="btn small quiet" data-act="excuse" data-key="${t.key}">Excuse</button>` : ""}
           </div>
         </div>
-      </div>`).join("") : `<p class="empty">No tasks scheduled today.</p>`}
+      </div>`).join("") + `</div>` : `<p class="empty">No tasks scheduled today.</p>`}
     </div>`;
-  }).join("");
+  }).join("") + `</div>`;
 }
 
 function adminApprovals() {
@@ -458,7 +458,7 @@ function adminApprovals() {
 
   return `
     ${st.approvals.length ? `<h2 class="section-title">Chores to check off</h2>
-      ${st.approvals.map(t => `<div class="card">
+      <div class="cards">${st.approvals.map(t => `<div class="card">
         <div class="spread">
           <div>
             <h3>${esc(t.title)}</h3>
@@ -469,9 +469,9 @@ function adminApprovals() {
             <button class="btn small accent" data-act="approve" data-key="${t.key}">Check off</button>
           </div>
         </div>
-      </div>`).join("")}` : ""}
+      </div>`).join("")}</div>` : ""}
     ${st.redemptions.length ? `<h2 class="section-title">Reward requests</h2>
-      ${st.redemptions.map(r => `<div class="card">
+      <div class="cards">${st.redemptions.map(r => `<div class="card">
         <div class="spread">
           <div>
             <h3>${esc(r.rewardTitle)}</h3>
@@ -482,7 +482,7 @@ function adminApprovals() {
             <button class="btn small accent" data-act="fulfill" data-id="${r.id}">Given</button>
           </div>
         </div>
-      </div>`).join("")}` : ""}`;
+      </div>`).join("")}</div>` : ""}`;
 }
 
 function dayChips(days) {
@@ -505,7 +505,7 @@ function adminTasks() {
       <button data-act="taskKind" data-k="study" aria-selected="${kind === "study"}">Study</button>
       <button data-act="taskKind" data-k="chore" aria-selected="${kind === "chore"}">Chores</button>
     </div>
-    <div class="card" style="margin-bottom:24px">
+    <div class="card form" style="margin-bottom:24px">
       <p class="eyebrow">${f.id ? "Edit" : "New"} ${kind === "chore" ? "chore" : "study block"}</p>
       <div class="stack">
         <div><label class="lab" for="f-title">Name</label>
@@ -533,7 +533,7 @@ function adminTasks() {
       const list = st.allTasks.filter(t => t.childId === c.id && t.type === kind);
       if (!list.length) return "";
       return `<h2 class="section-title">${esc(c.name)}</h2>
-        ${list.map(t => `<div class="card flat">
+        <div class="cards">${list.map(t => `<div class="card flat">
           <div class="spread">
             <div>
               <h3>${esc(t.title)}</h3>
@@ -544,7 +544,7 @@ function adminTasks() {
               <button class="btn small quiet" data-act="deleteTask" data-id="${t.id}">Remove</button>
             </div>
           </div>
-        </div>`).join("")}`;
+        </div>`).join("")}</div>`;
     }).join("")}`;
 }
 
@@ -553,7 +553,7 @@ function adminRewards() {
   const f = formState("reward", { id: "", title: "", cost: 25, childIds: [] });
 
   return `
-    <div class="card" style="margin-bottom:24px">
+    <div class="card form" style="margin-bottom:24px">
       <p class="eyebrow">${f.id ? "Edit reward" : "New reward"}</p>
       <div class="stack">
         <div><label class="lab" for="r-title">Reward</label>
@@ -572,7 +572,7 @@ function adminRewards() {
         </div>
       </div>
     </div>
-    ${st.rewards.map(r => `<div class="card flat">
+    <div class="cards">${st.rewards.map(r => `<div class="card flat">
       <div class="spread">
         <div>
           <h3>${esc(r.title)}</h3>
@@ -583,7 +583,7 @@ function adminRewards() {
           <button class="btn small quiet" data-act="deleteReward" data-id="${r.id}">Remove</button>
         </div>
       </div>
-    </div>`).join("")}`;
+    </div>`).join("")}</div>`;
 }
 
 function adminFamily() {
@@ -610,7 +610,7 @@ function adminFamily() {
   </div>`;
 
   return `
-    <div class="card" style="margin-bottom:24px">
+    <div class="card form" style="margin-bottom:24px">
       <p class="eyebrow">${f.id ? "Edit person" : "Add someone"}</p>
       <div class="stack">
         <div><label class="lab" for="u-name">Name</label>
@@ -638,7 +638,7 @@ function adminFamily() {
         </div>
       </div>
     </div>
-    <div class="card flat" style="margin-bottom:24px">
+    <div class="card flat form" style="margin-bottom:24px">
       <div class="spread">
         <div>
           <h3>Week starts on</h3>
@@ -651,9 +651,9 @@ function adminFamily() {
       </div>
     </div>
     <h2 class="section-title">Children</h2>
-    ${st.children.map(person).join("") || `<p class="empty">No children yet.</p>`}
+    ${st.children.length ? `<div class="cards">${st.children.map(person).join("")}</div>` : `<p class="empty">No children yet.</p>`}
     <h2 class="section-title">Parents and guardians</h2>
-    ${st.admins.map(person).join("")}
+    <div class="cards">${st.admins.map(person).join("")}</div>
     <p class="meta mono" style="text-align:center;margin-top:28px;font-size:10px;color:var(--muted)">
       build ${esc(String(st.version || "dev").slice(0, 12))}
     </p>`;

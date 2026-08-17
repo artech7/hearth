@@ -65,7 +65,34 @@ input, select { font: inherit; color: inherit; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
-.wrap { max-width: 720px; margin: 0 auto; padding: 26px 20px 90px; }
+/* Fluid shell: one column on a phone, filling the window on a desktop. */
+.wrap {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 26px clamp(18px, 3.5vw, 44px) 90px;
+}
+
+/* Card lists flow into columns once there's room for them. */
+.cards { display: grid; gap: 14px; grid-template-columns: 1fr; }
+.cards > .card + .card { margin-top: 0; }
+
+.board { display: grid; gap: 30px; grid-template-columns: 1fr; }
+
+@media (min-width: 760px) {
+  .cards { grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); }
+  .tabs { max-width: 760px; }
+  .card.form { max-width: 700px; }
+}
+
+@media (min-width: 1000px) {
+  .board { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); align-items: start; }
+  .wrap { padding-top: 34px; }
+}
+
+@media (min-width: 1180px) {
+  .cards { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+}
 
 /* ---- primitives ---- */
 
@@ -253,6 +280,12 @@ label.lab { display: block; font-size: 12.5px; color: var(--muted); margin-botto
 @media (max-width: 420px) {
   .dial { width: 244px; height: 244px; }
   .readout { font-size: 46px; }
+}
+
+@media (min-width: 900px) and (min-height: 720px) {
+  .dial { width: 340px; height: 340px; }
+  .dial .face { inset: 36px; }
+  .readout { font-size: 66px; }
 }
 
 /* theme switch */
