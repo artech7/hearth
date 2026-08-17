@@ -314,8 +314,13 @@ label.lab { display: block; font-size: 12.5px; color: var(--muted); margin-botto
   overflow: hidden;
   border-radius: 26px;
   background: #1B2320;
-  box-shadow: var(--out);
   isolation: isolate;
+  /* Inverse of the raised shadow: the page lip catches light at the
+     bottom-right and falls into shade at the top-left, so the card reads as
+     set into the surface rather than sitting on it. */
+  box-shadow:
+    3px 3px 9px var(--light),
+    -3px -3px 9px var(--dark);
 }
 
 .player {
@@ -343,7 +348,15 @@ label.lab { display: block; font-size: 12.5px; color: var(--muted); margin-botto
   position: absolute;
   inset: 0;
   z-index: 8;
+  border-radius: inherit;
   background: linear-gradient(to top, rgba(12,18,15,.88) 0%, rgba(12,18,15,.45) 34%, rgba(12,18,15,0) 62%);
+  /* The bevel proper: the surrounding page overhangs the top-left edge and
+     casts onto the artwork, while the far lip picks up a thin highlight.
+     Kept tight to the edge so it frames the scene instead of fogging it. */
+  box-shadow:
+    inset 6px 6px 11px rgba(0,0,0,.66),
+    inset -5px -5px 11px rgba(255,255,255,.13),
+    inset 0 0 0 1px rgba(0,0,0,.38);
   pointer-events: none;
 }
 
@@ -432,6 +445,9 @@ label.lab { display: block; font-size: 12.5px; color: var(--muted); margin-botto
 .rcard.preview {
   max-width: 240px;
   pointer-events: none;
+  box-shadow:
+    2px 2px 6px var(--light),
+    -2px -2px 6px var(--dark);
 }
 .rcard.preview .rcard-body { padding: 14px; }
 .rcard.preview .rcard-body h3 { font-size: 15px; }
