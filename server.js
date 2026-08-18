@@ -333,11 +333,19 @@ function scheduledOn(task, date, day) {
   return task.days.includes(day);
 }
 
-function tasksFor(childId, date, day) {
+function tasksFor(childId, date, day, live) {
+  const isLive = live !== false;
   return db.tasks
     .filter(t => (t.childId === childId || t.childId === SHARED) && t.active !== false && scheduledOn(t, date, day))
     .map(t => {
-      const log = settle(getLog(t, date, childId), t);
+      // Looking at another day is a read: no log is created, no timer settles,
+      // no points move.
+      const log = isLive
+        ? settle(getLog(t, date, childId), t)
+        : (db.logs[logKey(t.id, date, childId)] || {
+            key: logKey(t.id, date, childId), status: "idle",
+            accumulatedMs: 0, startedAt: null, awardedPoints: 0,
+          });
       return {
         id: t.id, title: t.title, type: t.type, durationMin: t.durationMin,
         points: t.points, days: t.days, childId: t.childId, shared: t.childId === SHARED,
@@ -381,7 +389,7 @@ function stateFor(user) {
       date,
       tasks,
       rewards: rewardsFor(user.id),
-      week: historyFor(user.id, 7),
+      week: weekOf(user.id, date),
       streak: streakFor(user.id),
       redemptions: db.redemptions
         .filter(r => r.childId === user.id)
@@ -392,7 +400,7 @@ function stateFor(user) {
 
   const board = children.map(c => {
     const tasks = tasksFor(c.id, date, day);
-    return { child: publicUser(c), tasks, streak: streakFor(c.id), week: historyFor(c.id, 7) };
+    return { child: publicUser(c), tasks, streak: streakFor(c.id), week: weekOf(c.id, date) };
   });
 
   return {
@@ -444,6 +452,18 @@ function dayRecord(childId, date) {
     if (log && log.status === "done") { done++; points += log.awardedPoints || 0; }
   }
   return { date, total: scheduled.length, done, points };
+}
+
+function weekStartOf(date) {
+  const startsOn = db.settings.weekStartsOn === 0 ? 0 : 1;
+  return shiftDate(date, -((dayOfDate(date) - startsOn + 7) % 7));
+}
+
+function weekOf(childId, date) {
+  const start = weekStartOf(date);
+  const out = [];
+  for (let i = 0; i < 7; i++) out.push(dayRecord(childId, shiftDate(start, i)));
+  return out;
 }
 
 function historyFor(childId, days) {
@@ -579,6 +599,32 @@ async function api(req, res, route) {
   const deny = () => json(res, 403, { error: "Only a parent can do that." });
 
   if (route === "state") return json(res, 200, stateFor(user));
+
+  if (route === "day") {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(body.date || "")) ? body.date : today();
+    const span = Math.abs(Math.round((new Date(date + "T12:00:00") - new Date(today() + "T12:00:00")) / 86400000));
+    if (span > 366) return json(res, 400, { error: "That date is too far away." });
+    const live = date === today();
+    const day = dayOfDate(date);
+
+    if (user.role === "child") {
+      return json(res, 200, {
+        date, live,
+        tasks: tasksFor(user.id, date, day, live),
+        week: weekOf(user.id, date),
+      });
+    }
+    const children = db.users.filter(u => u.role === "child");
+    return json(res, 200, {
+      date, live,
+      board: children.map(c => ({
+        child: publicUser(c),
+        tasks: tasksFor(c.id, date, day, live),
+        streak: streakFor(c.id),
+        week: weekOf(c.id, date),
+      })),
+    });
+  }
 
   if (route === "history") {
     const childId = user.role === "child" ? user.id : str(body.childId, 40);

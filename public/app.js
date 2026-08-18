@@ -17,6 +17,8 @@ const S = {
   form: null,
   toast: "",
   taskKind: "study",
+  day: null,        // null means today
+  dayData: null,    // fetched view for a non-current day
 };
 
 /* ---------- theme ---------- */
@@ -110,6 +112,16 @@ function setState(data) {
   S.state = data;
   S.fetchedAt = Date.now();
   S.view = data.me.role === "admin" ? "admin" : "child";
+}
+
+// The selected day: live state when it's today, a fetched snapshot otherwise.
+function dayView() {
+  const st = S.state;
+  if (!S.day || S.day === st.date) {
+    return { date: st.date, live: true, tasks: st.tasks, board: st.board, week: st.week };
+  }
+  if (S.dayData && S.dayData.date === S.day) return S.dayData;
+  return { date: S.day, live: false, tasks: [], board: [], week: st.week, loading: true };
 }
 
 /* ---------- live elapsed ---------- */
@@ -335,6 +347,41 @@ function rewardScene(title, uid, chosenSky) {
   return layers.join("");
 }
 
+
+/* ---------- week calendar ---------- */
+
+const DOW = ["S", "M", "T", "W", "T", "F", "S"];
+
+function dayNumber(date) {
+  return Number(date.slice(8, 10));
+}
+
+function monthLabel(date) {
+  const d = new Date(date + "T12:00:00");
+  return d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+}
+
+function weekCalendar(week, opts) {
+  const today = (S.state && S.state.date) || "";
+  const selected = S.day || today;
+  return `<div class="calendar">
+    ${week.map(d => {
+      const isToday = d.date === today;
+      const isSel = d.date === selected;
+      const state = d.total === 0 ? "rest" : d.done >= d.total ? "full" : d.done > 0 ? "part" : "none";
+      return `<button class="cday ${state} ${isToday ? "today" : ""} ${isSel ? "sel" : ""}"
+        data-act="pickDay" data-date="${d.date}"
+        aria-current="${isToday ? "date" : "false"}"
+        aria-label="${monthLabel(d.date)}, ${d.done} of ${d.total} done">
+        <span class="dw">${DOW[new Date(d.date + "T12:00:00").getDay()]}</span>
+        <span class="dn">${dayNumber(d.date)}</span>
+        <span class="dbar"><i style="width:${d.total ? Math.round((d.done / d.total) * 100) : 0}%"></i></span>
+      </button>`;
+    }).join("")}
+  </div>
+  ${opts && opts.note ? `<div class="calnote">${opts.note}</div>` : ""}`;
+}
+
 /* ---------- child ---------- */
 
 function statusChip(t) {
@@ -343,6 +390,10 @@ function statusChip(t) {
   if (t.status === "running") return `<span class="chip live">running</span>`;
   if (t.status === "paused") return `<span class="chip">paused</span>`;
   return `<span class="chip">not started</span>`;
+}
+
+function liveDay() {
+  return !S.day || !S.state || S.day === S.state.date;
 }
 
 function taskCard(t) {
@@ -365,11 +416,11 @@ function taskCard(t) {
         <div class="meta">${chore ? "chore · no set time" : t.durationMin + " min · study"} · ${t.points} pts${t.shared ? " · shared" : ""}${t.onceOn ? " · today only" : ""}</div>
         <div style="margin-top:8px">${statusChip(t)}</div>
       </div>
-      ${done ? `<button class="pad" disabled aria-label="Finished">${ICON.check}</button>`
+      ${!liveDay() ? "" : done ? `<button class="pad" disabled aria-label="Finished">${ICON.check}</button>`
         : `<button class="pad accent" data-act="open" data-id="${t.id}"
              aria-label="${t.running ? "Open timer" : "Start"} ${esc(t.title)}">${t.running ? ICON.pause : ICON.play}</button>`}
     </div>
-    ${chore && started ? `<div class="row" style="justify-content:flex-end;margin-top:12px">
+    ${chore && started && liveDay() ? `<div class="row" style="justify-content:flex-end;margin-top:12px">
       <button class="btn small accent" data-act="submit" data-id="${t.id}">I'm done</button>
     </div>` : ""}
   </div>`;
@@ -402,48 +453,36 @@ function childView() {
   </div>`;
 }
 
-function weekStrip(week, streak) {
-  const letters = ["S", "M", "T", "W", "T", "F", "S"];
-  return `<div class="card flat" style="margin-bottom:20px">
-    <div class="spread" style="margin-bottom:14px">
-      <div>
-        <div style="font-size:15px;font-weight:500">${streak > 0 ? streak + " day" + (streak === 1 ? "" : "s") + " running" : "This week"}</div>
-        <div class="meta" style="margin-top:4px">${
-          streak > 0 ? "Finish today to keep it going" : "Finish everything to start a streak"}</div>
-      </div>
-      ${streak > 0 ? `<span class="chip live">${streak}</span>` : ""}
-    </div>
-    <div class="week">
-      ${week.map(d => {
-        const dow = new Date(d.date + "T12:00:00").getDay();
-        const state = d.total === 0 ? "rest" : d.done >= d.total ? "full" : d.done > 0 ? "part" : "none";
-        const pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
-        return `<div class="wday ${state}" title="${d.date}: ${d.done} of ${d.total} done">
-          <span class="dot"></span>
-          <span class="lbl">${letters[dow]}</span>
-        </div>`;
-      }).join("")}
-    </div>
+function streakLine(streak, live) {
+  if (!streak) return "";
+  return `<div class="streak-line">
+    <span class="chip live">${streak}</span>
+    <span>${streak} day${streak === 1 ? "" : "s"} running${live ? " · finish today to keep it going" : ""}</span>
   </div>`;
 }
 
 function childToday() {
   const st = S.state;
-  const study = st.tasks.filter(t => t.type === "study");
-  const chores = st.tasks.filter(t => t.type === "chore");
-  const left = st.tasks.filter(t => t.status !== "done").length;
+  const view = dayView();
+  const tasks = view.tasks;
+  const study = tasks.filter(t => t.type === "study");
+  const chores = tasks.filter(t => t.type === "chore");
+  const left = tasks.filter(t => t.status !== "done").length;
+  const head = weekCalendar(view.week || st.week || [], {
+    note: view.live ? "" : monthLabel(view.date),
+  }) + streakLine(st.streak || 0, view.live);
 
-  if (!st.tasks.length) return weekStrip(st.week || [], st.streak || 0) + `<p class="empty">Nothing assigned for today.</p>`;
+  if (!tasks.length) return head + `<p class="empty">${view.live ? "Nothing assigned for today." : "Nothing scheduled that day."}</p>`;
 
-  return weekStrip(st.week || [], st.streak || 0) + `
+  return head + `
     <div class="card flat" style="margin-bottom:20px">
       <div class="spread">
         <div>
-          <div style="font-size:15px;font-weight:500">${left === 0 ? "All finished" : left + " left today"}</div>
-          <div class="meta" style="margin-top:4px">${st.tasks.length - left} of ${st.tasks.length} complete</div>
+          <div style="font-size:15px;font-weight:500">${left === 0 ? "All finished" : left + (view.live ? " left today" : " to do")}</div>
+          <div class="meta" style="margin-top:4px">${tasks.length - left} of ${tasks.length} complete</div>
         </div>
         <div class="ring" style="width:44px;height:44px;flex-basis:44px">
-          ${ringSvg((st.tasks.length - left) / st.tasks.length, 18, 4)}
+          ${ringSvg((tasks.length - left) / tasks.length, 18, 4)}
         </div>
       </div>
     </div>
@@ -581,7 +620,13 @@ function adminToday() {
   const st = S.state;
   if (!st.board.length) return `<p class="empty">Add a child in the Family tab to get started.</p>`;
 
-  return `<div class="board">` + st.board.map(b => {
+  const view = dayView();
+  const board = view.board && view.board.length ? view.board : st.board;
+  const head = weekCalendar((board[0] && board[0].week) || [], {
+    note: view.live ? "" : monthLabel(view.date) + (view.loading ? " · loading" : ""),
+  });
+
+  return head + `<div class="board">` + board.map(b => {
     const done = b.tasks.filter(t => t.status === "done").length;
     return `<div>
       <div class="spread" style="margin-bottom:12px">
@@ -607,7 +652,7 @@ function adminToday() {
           <div class="row">
             ${statusChip(t)}
             ${t.status === "awaiting" ? `<button class="btn small accent" data-act="approve" data-key="${t.key}">Check off</button>` : ""}
-            ${t.status !== "done" && t.status !== "awaiting" ? `<button class="btn small quiet" data-act="excuse" data-key="${t.key}">Excuse</button>` : ""}
+            ${liveDay() && t.status !== "done" && t.status !== "awaiting" ? `<button class="btn small quiet" data-act="excuse" data-key="${t.key}">Excuse</button>` : ""}
             ${t.status === "done" ? `<button class="btn small quiet" data-act="undo" data-key="${t.key}">Undo</button>` : ""}
           </div>
         </div>
@@ -933,6 +978,9 @@ async function refresh(silent) {
   try {
     captureForm();
     setState(await get("state"));
+    if (S.day && S.day !== S.state.date) {
+      try { S.dayData = await post("day", { date: S.day }); } catch (err) { /* keep what we have */ }
+    }
     if (silent && isTyping()) return;
     render();
   } catch (e) {
@@ -1075,7 +1123,15 @@ root.addEventListener("click", async e => {
       case "del": S.pin = S.pin.slice(0, -1); S.err = ""; return render();
 
       case "theme": cycleTheme(); return render();
-      case "tab": S.tab = +node.dataset.i; S.form = null; return render();
+      case "pickDay": {
+        const date = node.dataset.date;
+        S.day = date;
+        if (date === S.state.date) { S.dayData = null; return render(); }
+        render();
+        S.dayData = await post("day", { date });
+        return render();
+      }
+      case "tab": S.tab = +node.dataset.i; S.form = null; S.day = null; S.dayData = null; return render();
       case "taskKind": S.taskKind = node.dataset.k; S.form = null; return render();
       case "logout":
         await post("logout"); S.state = null; S.pick = null; S.view = "login";
