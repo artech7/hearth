@@ -81,6 +81,7 @@ function seed() {
       task(nova.id, "Feed the cat", "chore", 5, 5),
     ],
     logs: {},
+    events: [],
     rewards: [
       { id: id("r"), title: "30 min screen time", cost: 20, childIds: [], active: true },
       { id: id("r"), title: "Pick dinner", cost: 45, childIds: [], active: true },
@@ -94,6 +95,7 @@ function seed() {
 // they become savings and everyone picks up a fresh allowance.
 function migrate() {
   if (!db.settings) db.settings = { weekStartsOn: 1 };
+  if (!Array.isArray(db.events)) db.events = [];
   for (const u of db.users) {
     if (u.role !== "child") { delete u.points; continue; }
     if (u.earned === undefined) u.earned = typeof u.points === "number" ? u.points : 0;
@@ -256,6 +258,10 @@ function refreshAllowance(child) {
   return child;
 }
 
+function eventVisibleTo(ev, childId) {
+  return ev.childIds.length === 0 || ev.childIds.includes(childId);
+}
+
 function ownsTask(task, childId) {
   return task.childId === childId || task.childId === SHARED;
 }
@@ -391,6 +397,7 @@ function stateFor(user) {
       rewards: rewardsFor(user.id),
       week: weekOf(user.id, date),
       streak: streakFor(user.id),
+      events: eventsOn(date, user.id),
       redemptions: db.redemptions
         .filter(r => r.childId === user.id)
         .slice(-12).reverse()
@@ -413,6 +420,7 @@ function stateFor(user) {
     version: VERSION,
     allTasks: db.tasks.filter(t => t.active !== false),
     rewards: db.rewards.filter(r => r.active !== false),
+    events: eventsOn(date, null),
     approvals: board.flatMap(b =>
       b.tasks.filter(t => t.status === "awaiting").map(t => ({ ...t, childName: b.child.name }))
     ),
@@ -452,6 +460,13 @@ function dayRecord(childId, date) {
     if (log && log.status === "done") { done++; points += log.awardedPoints || 0; }
   }
   return { date, total: scheduled.length, done, points };
+}
+
+function eventsOn(date, childId) {
+  return db.events
+    .filter(e => e.date === date && (!childId || eventVisibleTo(e, childId)))
+    .map(e => ({ ...e, who: e.childIds.map(cid => (db.users.find(u => u.id === cid) || {}).name).filter(Boolean) }))
+    .sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
 }
 
 function weekStartOf(date) {
@@ -612,6 +627,7 @@ async function api(req, res, route) {
         date, live,
         tasks: tasksFor(user.id, date, day, live),
         week: weekOf(user.id, date),
+        events: eventsOn(date, user.id),
       });
     }
     const children = db.users.filter(u => u.role === "child");
@@ -623,7 +639,75 @@ async function api(req, res, route) {
         streak: streakFor(c.id),
         week: weekOf(c.id, date),
       })),
+      events: eventsOn(date, null),
     });
+  }
+
+  if (route === "saveEvent") {
+    if (!isAdmin) return deny();
+    const title = str(body.title, 80);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(body.date || "")) ? body.date : null;
+    if (!title) return json(res, 400, { error: "Give it a name." });
+    if (!date) return json(res, 400, { error: "Pick a date." });
+    const fields = {
+      title,
+      date,
+      time: /^\d{2}:\d{2}$/.test(String(body.time || "")) ? body.time : "",
+      note: str(body.note, 300),
+      childIds: Array.isArray(body.childIds)
+        ? body.childIds.filter(cid => db.users.some(u => u.id === cid && u.role === "child")) : [],
+    };
+    const existing = db.events.find(e => e.id === body.id);
+    if (existing) Object.assign(existing, fields);
+    else db.events.push(Object.assign({ id: id("e"), done: false }, fields));
+    save();
+    return json(res, 200, { ok: true });
+  }
+
+  if (route === "deleteEvent") {
+    if (!isAdmin) return deny();
+    db.events = db.events.filter(e => e.id !== body.id);
+    save();
+    return json(res, 200, { ok: true });
+  }
+
+  if (route === "toggleEvent") {
+    const ev = db.events.find(e => e.id === body.id);
+    if (!ev) return json(res, 404, { error: "Not found." });
+    if (!isAdmin && !eventVisibleTo(ev, user.id)) return json(res, 403, { error: "Not yours." });
+    ev.done = !ev.done;
+    save();
+    return json(res, 200, { ok: true });
+  }
+
+  if (route === "month") {
+    const anchor = /^\d{4}-\d{2}-\d{2}$/.test(String(body.date || "")) ? body.date : today();
+    const first = anchor.slice(0, 8) + "01";
+    const d = new Date(first + "T12:00:00");
+    const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    const children = user.role === "child"
+      ? db.users.filter(u => u.id === user.id)
+      : db.users.filter(u => u.role === "child");
+
+    const days = [];
+    for (let i = 0; i < daysInMonth; i++) {
+      const date = shiftDate(first, i);
+      const day = dayOfDate(date);
+      let total = 0, done = 0;
+      for (const c of children) {
+        const rec = dayRecord(c.id, date);
+        total += rec.total;
+        done += rec.done;
+      }
+      days.push({
+        date, total, done,
+        events: db.events
+          .filter(e => e.date === date && (user.role !== "child" || eventVisibleTo(e, user.id)))
+          .map(e => ({ ...e, who: e.childIds.map(cid => (db.users.find(u => u.id === cid) || {}).name).filter(Boolean) }))
+          .sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99")),
+      });
+    }
+    return json(res, 200, { month: first.slice(0, 7), days });
   }
 
   if (route === "history") {
@@ -730,6 +814,39 @@ async function api(req, res, route) {
     }
     save();
     return json(res, 200, stateFor(user));
+  }
+
+  if (route === "credit") {
+    if (!isAdmin) return deny();
+    const task = db.tasks.find(t => t.id === body.taskId);
+    const child = db.users.find(u => u.id === body.childId && u.role === "child");
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(body.date || "")) ? body.date : today();
+    if (!task || !child) return json(res, 404, { error: "Task or child not found." });
+    if (!ownsTask(task, child.id)) return json(res, 400, { error: "That task isn't theirs." });
+    if (date > today()) return json(res, 400, { error: "That day hasn't happened yet." });
+    if (!scheduledOn(task, date, dayOfDate(date))) {
+      return json(res, 400, { error: "That task wasn't scheduled that day." });
+    }
+
+    // The log may not exist at all: nobody started it, and browsing a past day
+    // deliberately creates nothing.
+    const key = logKey(task.id, date, child.id);
+    const log = db.logs[key] || (db.logs[key] = {
+      key, taskId: task.id, childId: child.id, date,
+      status: "idle", accumulatedMs: 0, startedAt: null,
+      completedAt: null, approvedBy: null, awardedPoints: 0,
+    });
+    if (log.status === "done") return json(res, 409, { error: "Already marked done." });
+
+    log.status = "done";
+    log.startedAt = null;
+    log.completedAt = Date.now();
+    log.approvedBy = user.id;
+    log.backfilled = true;
+    if (task.durationMin) log.accumulatedMs = Math.max(log.accumulatedMs, task.durationMin * 60000);
+    award(child.id, task.points, log);
+    save();
+    return json(res, 200, { ok: true });
   }
 
   if (route === "excuse") {

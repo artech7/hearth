@@ -1,0 +1,11 @@
+node_modules
+data.json
+*.log
+*.txt
+*.sh
+smoke.js
+jq.js
+build_single.js
+hearth.js
+.git
+.env

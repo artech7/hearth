@@ -15,6 +15,8 @@ const S = {
   focus: null,
   fetchedAt: 0,
   form: null,
+  month: null,
+  monthData: null,
   toast: "",
   taskKind: "study",
   day: null,        // null means today
@@ -472,7 +474,19 @@ function childToday() {
     note: view.live ? "" : monthLabel(view.date),
   }) + streakLine(st.streak || 0, view.live);
 
-  if (!tasks.length) return head + `<p class="empty">${view.live ? "Nothing assigned for today." : "Nothing scheduled that day."}</p>`;
+  const events = view.events || st.events || [];
+  const agenda = events.length ? `<h2 class="section-title">What's on</h2><div class="cards" style="margin-bottom:4px">
+    ${events.map(e => `<div class="card flat">
+      <div class="spread">
+        <div style="min-width:0">
+          <h3 style="${e.done ? "text-decoration:line-through;opacity:.6" : ""}">${esc(e.title)}</h3>
+          <div class="meta">${e.time ? esc(e.time) : "any time"}${e.note ? " · " + esc(e.note) : ""}</div>
+        </div>
+        <button class="btn small quiet" data-act="toggleEvent" data-id="${e.id}">${e.done ? "Undo" : "Done"}</button>
+      </div>
+    </div>`).join("")}</div>` : "";
+
+  if (!tasks.length) return head + agenda + `<p class="empty">${view.live ? "Nothing assigned for today." : "Nothing scheduled that day."}</p>`;
 
   return head + `
     <div class="card flat" style="margin-bottom:20px">
@@ -486,6 +500,7 @@ function childToday() {
         </div>
       </div>
     </div>
+    ${agenda}
     ${study.length ? `<h2 class="section-title">Studying</h2><div class="cards">${study.map(taskCard).join("")}</div>` : ""}
     ${chores.length ? `<h2 class="section-title">Chores</h2><div class="cards">${chores.map(taskCard).join("")}</div>` : ""}`;
 }
@@ -578,6 +593,161 @@ function focusView() {
   </div>`;
 }
 
+
+/* ---------- month planner ---------- */
+
+const MONTHS = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+
+function monthAnchor() {
+  return S.month || (S.state && S.state.date) || "";
+}
+
+function shiftMonth(anchor, delta) {
+  const d = new Date(anchor + "T12:00:00");
+  d.setDate(1);
+  d.setMonth(d.getMonth() + delta);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function adminCalendar() {
+  const st = S.state;
+  const data = S.monthData;
+  const anchor = monthAnchor();
+  const label = new Date(anchor + "T12:00:00");
+
+  if (!data || data.month !== anchor.slice(0, 7)) {
+    loadMonth(anchor);
+    return `<p class="empty">Loading…</p>`;
+  }
+
+  const startsOn = (st.settings && st.settings.weekStartsOn === 0) ? 0 : 1;
+  const firstDow = new Date(data.days[0].date + "T12:00:00").getDay();
+  const lead = (firstDow - startsOn + 7) % 7;
+  const letters = startsOn === 0
+    ? ["S", "M", "T", "W", "T", "F", "S"]
+    : ["M", "T", "W", "T", "F", "S", "S"];
+
+  const selected = S.day || st.date;
+  const cells = [];
+  for (let i = 0; i < lead; i++) cells.push(`<div class="mcell empty"></div>`);
+  for (const d of data.days) {
+    const isToday = d.date === st.date;
+    const isSel = d.date === selected;
+    const pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
+    cells.push(`<button class="mcell ${isToday ? "today" : ""} ${isSel ? "sel" : ""}"
+      data-act="pickDay" data-date="${d.date}"
+      aria-label="${d.date}, ${d.done} of ${d.total} done, ${d.events.length} events">
+      <span class="mnum">${Number(d.date.slice(8))}</span>
+      ${d.total ? `<span class="mbar"><i style="width:${pct}%"></i></span>` : `<span class="mbar blank"></span>`}
+      ${d.events.length ? `<span class="mdots">${d.events.slice(0, 3).map(e =>
+        `<i class="${e.done ? "done" : ""}"></i>`).join("")}</span>` : `<span class="mdots"></span>`}
+    </button>`);
+  }
+
+  return `
+    <div class="mhead">
+      <button class="btn quiet small" data-act="month" data-d="-1" aria-label="Previous month">‹</button>
+      <div class="mtitle">${MONTHS[label.getMonth()]} ${label.getFullYear()}</div>
+      <button class="btn quiet small" data-act="month" data-d="1" aria-label="Next month">›</button>
+    </div>
+    <div class="mgrid-head">${letters.map(l => `<span>${l}</span>`).join("")}</div>
+    <div class="mgrid">${cells.join("")}</div>
+    ${dayPanel(selected)}`;
+}
+
+function loadMonth(anchor) {
+  post("month", { date: anchor })
+    .then(data => { S.monthData = data; render(); })
+    .catch(err => toast(err.message));
+}
+
+function dayPanel(date) {
+  const st = S.state;
+  const data = S.monthData;
+  const rec = data && data.days.find(d => d.date === date);
+  const view = dayView();
+  const board = view.board && view.board.length ? view.board : (view.live ? st.board : []);
+  const past = date <= st.date;
+
+  const f = S.form && S.form.kind === "event" ? S.form : null;
+
+  return `<div class="daypanel">
+    <div class="spread" style="margin-bottom:14px">
+      <h2 class="section-title" style="margin:0">${esc(monthLabel(date))}</h2>
+      <button class="btn small ${f ? "on" : "accent"}" data-act="${f ? "cancelForm" : "newEvent"}" data-date="${date}">
+        ${f ? "Cancel" : "Add something"}
+      </button>
+    </div>
+
+    ${f ? eventForm(f) : ""}
+
+    ${rec && rec.events.length ? `<div class="cards" style="margin-bottom:22px">
+      ${rec.events.map(e => `<div class="card flat">
+        <div class="spread">
+          <div style="min-width:0">
+            <h3 style="${e.done ? "text-decoration:line-through;opacity:.6" : ""}">${esc(e.title)}</h3>
+            <div class="meta">${e.time ? esc(e.time) + " · " : ""}${
+              e.who.length ? esc(e.who.join(", ")) : "everyone"}${e.note ? " · " + esc(e.note) : ""}</div>
+          </div>
+          <div class="row">
+            <button class="btn small quiet" data-act="toggleEvent" data-id="${e.id}">${e.done ? "Undo" : "Done"}</button>
+            <button class="btn small quiet" data-act="editEvent" data-id="${e.id}">Edit</button>
+            <button class="btn small quiet" data-act="deleteEvent" data-id="${e.id}">Remove</button>
+          </div>
+        </div>
+      </div>`).join("")}
+    </div>` : `<p class="meta" style="margin-bottom:22px">Nothing scheduled.</p>`}
+
+    ${board.map(b => `
+      <h2 class="section-title">${esc(b.child.name)}</h2>
+      ${b.tasks.length ? `<div class="cards">${b.tasks.map(t => `<div class="card flat">
+        <div class="spread">
+          <div style="min-width:0">
+            <h3>${esc(t.title)}</h3>
+            <div class="meta">${t.type === "chore" ? "chore" : t.durationMin + " min study"} · ${t.points} pts</div>
+          </div>
+          <div class="row">
+            ${statusChip(t)}
+            ${past && t.status !== "done" ? `<button class="btn small accent" data-act="credit"
+              data-task="${t.id}" data-child="${b.child.id}" data-date="${date}">Mark done</button>` : ""}
+            ${t.status === "done" ? `<button class="btn small quiet" data-act="undo" data-key="${t.key}">Undo</button>` : ""}
+          </div>
+        </div>
+      </div>`).join("")}</div>` : `<p class="meta">Nothing scheduled.</p>`}
+    `).join("")}
+  </div>`;
+}
+
+function eventForm(f) {
+  const st = S.state;
+  return `<div class="card form" style="margin-bottom:20px">
+    <p class="eyebrow">${f.id ? "Edit" : "New"}</p>
+    <div class="stack">
+      <div><label class="lab" for="e-title">What</label>
+        <input class="field" id="e-title" value="${esc(f.title || "")}" placeholder="Dentist, football, grandma visits…"></div>
+      <div class="grid2">
+        <div><label class="lab" for="e-date">Date</label>
+          <input class="field" id="e-date" type="date" value="${esc(f.date || "")}"></div>
+        <div><label class="lab" for="e-time">Time (optional)</label>
+          <input class="field" id="e-time" type="time" value="${esc(f.time || "")}"></div>
+      </div>
+      <div><label class="lab" for="e-note">Note (optional)</label>
+        <input class="field" id="e-note" value="${esc(f.note || "")}" placeholder="Bring kit"></div>
+      <div><label class="lab">Who</label>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn small ${(f.childIds || []).length === 0 ? "accent on" : ""}"
+            data-act="eventWho" data-id="all">Everyone</button>
+          ${st.children.map(c => `<button type="button" class="btn small ${(f.childIds || []).includes(c.id) ? "accent on" : ""}"
+            data-act="eventWho" data-id="${c.id}">${esc(c.name)}</button>`).join("")}
+        </div></div>
+      <div class="row" style="justify-content:flex-end">
+        <button class="btn accent" data-act="saveEvent">${f.id ? "Save" : "Add"}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 /* ---------- admin ---------- */
 
 function themeButton() {
@@ -597,8 +767,8 @@ function tabBar(labels) {
 function adminView() {
   const st = S.state;
   const pending = st.approvals.length + st.redemptions.length;
-  const tabs = ["Today", "Queue" + (pending ? " " + pending : ""), "Tasks", "Rewards", "Family"];
-  const body = [adminToday, adminApprovals, adminTasks, adminRewards, adminFamily][S.tab]();
+  const tabs = ["Today", "Queue" + (pending ? " " + pending : ""), "Plan", "Tasks", "Rewards", "Family"];
+  const body = [adminToday, adminApprovals, adminCalendar, adminTasks, adminRewards, adminFamily][S.tab]();
 
   return `<div class="wrap">
     <div class="top">
@@ -920,7 +1090,8 @@ function isTyping() {
 // A re-render rebuilds the DOM, so pull anything half-typed back into state first.
 function captureForm() {
   if (!S.form) return;
-  if (S.form.kind === "task") readTaskForm(S.form);
+  if (S.form.kind === "event") readEventForm(S.form);
+  else if (S.form.kind === "task") readTaskForm(S.form);
   else if (S.form.kind === "reward") readRewardForm(S.form);
   else if (S.form.kind === "user") readUserForm(S.form);
 }
@@ -1098,6 +1269,25 @@ root.addEventListener("pointerleave", e => {
 
 /* ---------- events ---------- */
 
+async function reloadMonth() {
+  const anchor = monthAnchor();
+  try {
+    S.monthData = await post("month", { date: anchor });
+    if (S.day && S.day !== S.state.date) S.dayData = await post("day", { date: S.day });
+  } catch (err) { /* leave what we have */ }
+  render();
+}
+
+function readEventForm(f) {
+  if (el("#e-title")) {
+    f.title = val("e-title");
+    f.date = val("e-date");
+    f.time = val("e-time");
+    f.note = val("e-note");
+  }
+  if (!Array.isArray(f.childIds)) f.childIds = [];
+}
+
 function formState(kind, seed) {
   if (!S.form || S.form.kind !== kind) S.form = Object.assign({ kind }, seed);
   return S.form;
@@ -1131,6 +1321,53 @@ root.addEventListener("click", async e => {
         S.dayData = await post("day", { date });
         return render();
       }
+      case "month": {
+        S.month = shiftMonth(monthAnchor(), +node.dataset.d);
+        S.monthData = null;
+        return render();
+      }
+      case "newEvent":
+        S.form = { kind: "event", id: "", title: "", date: node.dataset.date, time: "", note: "", childIds: [] };
+        return render();
+      case "editEvent": {
+        const ev = (S.monthData.days.flatMap(d => d.events)).find(e => e.id === node.dataset.id);
+        S.form = Object.assign({ kind: "event" }, ev);
+        return render();
+      }
+      case "saveEvent": {
+        const f = S.form && S.form.kind === "event" ? S.form : { kind: "event", childIds: [] };
+        readEventForm(f);
+        if (!f.title) return toast("Give it a name.");
+        await post("saveEvent", f);
+        S.form = null;
+        await reloadMonth();
+        return toast(f.id ? "Updated" : "Added");
+      }
+      case "eventWho": {
+        const f = S.form && S.form.kind === "event" ? S.form : null;
+        if (!f) return;
+        readEventForm(f);
+        if (node.dataset.id === "all") f.childIds = [];
+        else f.childIds = (f.childIds || []).includes(node.dataset.id)
+          ? f.childIds.filter(x => x !== node.dataset.id)
+          : (f.childIds || []).concat(node.dataset.id);
+        return render();
+      }
+      case "toggleEvent":
+        await post("toggleEvent", { id: node.dataset.id });
+        if (S.state.me.role === "child") return refresh();
+        return reloadMonth();
+      case "deleteEvent":
+        if (!confirm("Remove this?")) return;
+        await post("deleteEvent", { id: node.dataset.id });
+        return reloadMonth();
+      case "credit":
+        await post("credit", {
+          taskId: node.dataset.task, childId: node.dataset.child, date: node.dataset.date,
+        });
+        await refresh();
+        await reloadMonth();
+        return toast("Marked done");
       case "tab": S.tab = +node.dataset.i; S.form = null; S.day = null; S.dayData = null; return render();
       case "taskKind": S.taskKind = node.dataset.k; S.form = null; return render();
       case "logout":

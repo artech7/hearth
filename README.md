@@ -118,6 +118,15 @@ A streak counts back from today over days where everything scheduled got done. T
 Day records are rebuilt from the logs rather than stored, so editing or deleting a task doesn't corrupt the past.
 
 
+## The planner
+
+The **Plan** tab is a month calendar. Each day shows a bar for how much of that day's work got done and a dot per scheduled event. Picking a day opens a panel underneath with everything on it.
+
+**Events** are anything that isn't a task: appointments, visits, matches. They carry a name, a date, an optional time and note, and either apply to everyone or to specific children. Children see their own on their Today tab under "What's on" and can tick them off; only a parent can create, edit, or remove them.
+
+**Marking past work done.** From that day panel, any task that wasn't completed shows a **Mark done** button, which awards the full points and counts toward history and streaks — for when someone did the job and nobody remembered to check it off. It works on today and any past day, never a future one, and refuses a task that wasn't scheduled that day or belongs to another child. Undo reverses it.
+
+
 ## Data and backups
 
 Existing `data.json` files upgrade automatically on first launch: the old single `points` number becomes savings, and everyone picks up a full allowance.

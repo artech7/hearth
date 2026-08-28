@@ -521,3 +521,80 @@ label.lab { display: block; font-size: 12.5px; color: var(--muted); margin-botto
   color: var(--muted);
   margin-bottom: 18px;
 }
+
+/* ---- month planner ---- */
+
+.mhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.mtitle { font-size: 16px; font-weight: 500; letter-spacing: -0.02em; }
+
+.mgrid-head {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.mgrid-head span {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+
+.mgrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 26px;
+}
+
+.mcell {
+  border: 0;
+  background: var(--bg);
+  border-radius: 13px;
+  aspect-ratio: 1;
+  padding: 7px 4px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-shadow: var(--in-sm);
+  transition: box-shadow 160ms ease;
+}
+.mcell.empty { box-shadow: none; background: none; }
+.mcell.today { box-shadow: var(--out-sm); }
+.mcell.today .mnum { color: var(--accent-ink); font-weight: 600; }
+.mcell.sel { box-shadow: var(--out-sm), 0 0 0 2px var(--bg), 0 0 0 3px var(--accent); }
+
+.mnum { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+
+.mbar {
+  width: 62%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--track);
+  overflow: hidden;
+}
+.mbar.blank { opacity: 0; }
+.mbar i { display: block; height: 100%; background: var(--accent); }
+
+.mdots { display: flex; gap: 3px; height: 5px; }
+.mdots i {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--accent-ink); opacity: .85;
+}
+.mdots i.done { background: var(--muted); opacity: .5; }
+
+.daypanel { border-top: 0.5px solid var(--track); padding-top: 22px; }
+
+@media (max-width: 460px) {
+  .mgrid, .mgrid-head { gap: 4px; }
+  .mcell { border-radius: 10px; padding: 4px 2px; }
+  .mnum { font-size: 12px; }
+}
