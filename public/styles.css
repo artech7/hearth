@@ -598,3 +598,96 @@ label.lab { display: block; font-size: 12.5px; color: var(--muted); margin-botto
   .mcell { border-radius: 10px; padding: 4px 2px; }
   .mnum { font-size: 12px; }
 }
+
+/* ---- motion ----
+   Everything here is short and settles. The surfaces are meant to feel like
+   pressed material, so things ease into place rather than bouncing. */
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(9px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes settle {
+  0%   { box-shadow: var(--out); }
+  45%  { box-shadow: var(--in-sm), 0 0 0 2px var(--accent); }
+  100% { box-shadow: var(--out); }
+}
+
+@keyframes bump {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.09); }
+  100% { transform: scale(1); }
+}
+
+@keyframes fadeScale {
+  from { opacity: 0; transform: scale(.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translate(-50%, 14px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes dotPop {
+  0%   { transform: scale(.4); }
+  60%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: .55; }
+  50%      { opacity: 1; }
+}
+
+.view.enter > * {
+  animation: rise 400ms cubic-bezier(.22, .9, .3, 1) both;
+}
+.view.enter > *:nth-child(1) { animation-delay: 0ms; }
+.view.enter > *:nth-child(2) { animation-delay: 45ms; }
+.view.enter > *:nth-child(3) { animation-delay: 90ms; }
+.view.enter > *:nth-child(4) { animation-delay: 130ms; }
+.view.enter > *:nth-child(5) { animation-delay: 165ms; }
+.view.enter > *:nth-child(n+6) { animation-delay: 195ms; }
+
+/* Cards inside a grid fan in rather than arriving as a block. */
+.view.enter .cards > *:nth-child(1) { animation: rise 420ms cubic-bezier(.22,.9,.3,1) both 60ms; }
+.view.enter .cards > *:nth-child(2) { animation: rise 420ms cubic-bezier(.22,.9,.3,1) both 110ms; }
+.view.enter .cards > *:nth-child(3) { animation: rise 420ms cubic-bezier(.22,.9,.3,1) both 160ms; }
+.view.enter .cards > *:nth-child(4) { animation: rise 420ms cubic-bezier(.22,.9,.3,1) both 205ms; }
+.view.enter .cards > *:nth-child(n+5) { animation: rise 420ms cubic-bezier(.22,.9,.3,1) both 245ms; }
+
+.card.settled { animation: settle 900ms ease-out; }
+.points.bump { animation: bump 520ms cubic-bezier(.3, 1.5, .5, 1); }
+.overlay { animation: fadeScale 260ms cubic-bezier(.22, .9, .3, 1); }
+.toast { animation: toastIn 320ms cubic-bezier(.22, .9, .3, 1); }
+.pin-dots i.filled { animation: dotPop 260ms cubic-bezier(.3, 1.5, .5, 1); }
+
+/* Login profiles arrive one after another. */
+.profile { animation: rise 380ms cubic-bezier(.22,.9,.3,1) both; }
+.profile:nth-child(2) { animation-delay: 55ms; }
+.profile:nth-child(3) { animation-delay: 110ms; }
+.profile:nth-child(n+4) { animation-delay: 160ms; }
+
+/* The month grid fills in row by row. */
+.view.enter .mcell { animation: rise 300ms ease-out both; }
+.view.enter .mcell:nth-child(7n+1) { animation-delay: 30ms; }
+.view.enter .mcell:nth-child(7n+4) { animation-delay: 60ms; }
+.view.enter .mcell:nth-child(7n)   { animation-delay: 90ms; }
+
+/* Bars and rings ease to their new value instead of snapping. */
+.mbar i, .cday .dbar i { transition: width 520ms cubic-bezier(.22, .9, .3, 1); }
+.ring .js-arc { transition: stroke-dashoffset 700ms cubic-bezier(.22, .9, .3, 1); }
+
+.empty { animation: breathe 2.4s ease-in-out infinite; }
+
+.streak-line .chip.live { animation: bump 700ms cubic-bezier(.3, 1.4, .5, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, .view.enter > *, .view.enter .cards > *, .view.enter .mcell,
+  .card.settled, .points.bump, .overlay, .toast, .profile, .empty {
+    animation: none !important;
+    transition: none !important;
+  }
+}

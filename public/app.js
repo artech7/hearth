@@ -15,6 +15,10 @@ const S = {
   focus: null,
   fetchedAt: 0,
   form: null,
+  entering: false,
+  lastKey: "",
+  bump: false,
+  justDone: [],
   month: null,
   monthData: null,
   toast: "",
@@ -109,6 +113,8 @@ function toast(msg) {
 }
 
 function setState(data) {
+  if (S.state && S.state.me && data.me && typeof data.me.points === "number"
+      && S.state.me.points !== data.me.points) S.bump = true;
   if (data.tasks && S.state) notifyFinished(data.tasks);
   else if (data.tasks) data.tasks.forEach(t => chimed.add("seen:" + (t.key || t.id)));
   S.state = data;
@@ -407,7 +413,7 @@ function taskCard(t) {
   const face = done ? "✓" : chore ? clock(liveElapsed(t)) : clock(Math.max(0, total - liveElapsed(t)));
   const started = t.status === "running" || t.status === "paused";
 
-  return `<div class="card">
+  return `<div class="card ${S.justDone.includes(t.id) ? "settled" : ""}">
     <div class="row">
       <div class="ring js-ring" data-id="${t.id}" data-mode="${chore ? "up" : "down"}">
         ${ringSvg(pct, 22, 5)}
@@ -443,7 +449,7 @@ function childView() {
         </div>
       </div>
       <div class="row">
-        <span class="points" title="allowance + saved">
+        <span class="points ${S.bump ? "bump" : ""}" title="allowance + saved">
           <b>${st.me.points}</b><span>PTS</span>
         </span>
         ${themeButton()}
@@ -451,7 +457,7 @@ function childView() {
       </div>
     </div>
     ${tabBar(tabs)}
-    ${body}
+    <div class="view ${S.entering ? "enter" : ""}">${body}</div>
   </div>`;
 }
 
@@ -782,7 +788,7 @@ function adminView() {
       </div>
     </div>
     ${tabBar(tabs)}
-    ${body}
+    <div class="view ${S.entering ? "enter" : ""}">${body}</div>
   </div>`;
 }
 
@@ -1096,8 +1102,16 @@ function captureForm() {
   else if (S.form.kind === "user") readUserForm(S.form);
 }
 
+function viewKey() {
+  return [S.view, S.tab, S.day || "", S.focus || "", S.month || ""].join("|");
+}
+
 function render() {
   captureForm();
+  // Entrance animations run when you move somewhere new. A background refresh
+  // rebuilds the same DOM, and replaying them every six seconds would twitch.
+  S.entering = viewKey() !== S.lastKey;
+  S.lastKey = viewKey();
   let html;
   if (S.view === "loading") html = `<p class="empty" style="padding-top:60px">Loading…</p>`;
   else if (S.view === "login") html = loginView();
@@ -1105,6 +1119,9 @@ function render() {
   else html = adminView();
 
   root.innerHTML = html + (S.toast ? `<div class="toast">${esc(S.toast)}</div>` : "");
+  // One-shot flags: clear them so the next render is calm.
+  S.bump = false;
+  if (S.justDone.length) setTimeout(() => { S.justDone = []; }, 900);
 }
 
 /* ---------- ticking ---------- */
@@ -1205,7 +1222,7 @@ function notifyFinished(tasks) {
   for (const t of tasks) {
     const key = t.key || t.id;
     if (t.status === "done" || t.status === "awaiting") {
-      if (chimed.has(key) === false && chimed.has("seen:" + key)) chime();
+      if (chimed.has(key) === false && chimed.has("seen:" + key)) { chime(); S.justDone.push(t.id); }
       chimed.add("seen:" + key);
       chimed.add(key);
     } else {
