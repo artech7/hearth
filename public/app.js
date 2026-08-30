@@ -22,6 +22,7 @@ const S = {
   month: null,
   monthData: null,
   selecting: false,
+  picking: false,
   sel: [],
   toast: "",
   taskKind: "study",
@@ -152,6 +153,8 @@ const ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
   pause: '<svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>',
   check: '<svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>',
+  chevL: '<svg viewBox="0 0 24 24"><path d="M15.4 4.6 13.9 3l-9 9 9 9 1.5-1.6L8 12z"/></svg>',
+  chevR: '<svg viewBox="0 0 24 24"><path d="M8.6 3 7.1 4.6 14 12l-6.9 7.4L8.6 21l9-9z"/></svg>',
   back: '<svg viewBox="0 0 24 24"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>',
   system: '<svg viewBox="0 0 24 24"><path d="M4 5h16v10H4zm0 12h16v2H4z"/></svg>',
   sun: '<svg viewBox="0 0 24 24"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5h0v3h0zm-1 0h2v3h-2zm0 19h2v3h-2zM2 11h3v2H2zm17 0h3v2h-3zM4.2 5.6l1.4-1.4 2.1 2.1-1.4 1.4zM16.3 17.7l1.4-1.4 2.1 2.1-1.4 1.4zM4.2 18.4l2.1-2.1 1.4 1.4-2.1 2.1zM16.3 6.3l2.1-2.1 1.4 1.4-2.1 2.1z"/></svg>',
@@ -701,16 +704,43 @@ function adminCalendar() {
   return `
     ${selBar}
     <div class="mhead">
-      <button class="btn quiet small" data-act="month" data-d="-1" aria-label="Previous month">‹</button>
-      <div class="mtitle">${MONTHS[label.getMonth()]} ${label.getFullYear()}</div>
-      <button class="btn quiet small" data-act="month" data-d="1" aria-label="Next month">›</button>
+      <button class="mnav" data-act="month" data-d="-1" aria-label="Previous month">${ICON.chevL}</button>
+      <button class="mtitle ${S.picking ? "on" : ""}" data-act="monthPicker"
+        aria-expanded="${S.picking ? "true" : "false"}">
+        <span>${MONTHS[label.getMonth()]} ${label.getFullYear()}</span>
+        <span class="caret">${S.picking ? "▲" : "▼"}</span>
+      </button>
+      <button class="mnav" data-act="month" data-d="1" aria-label="Next month">${ICON.chevR}</button>
     </div>
+    ${S.picking ? monthPicker(label) : ""}
+    ${anchor.slice(0, 7) === st.date.slice(0, 7) ? "" : `<div class="row" style="justify-content:center;margin-bottom:14px">
+      <button class="btn small quiet" data-act="monthToday">Back to ${MONTHS[new Date(st.date + "T12:00:00").getMonth()]}</button>
+    </div>`}
     ${S.selecting ? "" : `<div class="row" style="justify-content:flex-end;margin-bottom:12px">
       <button class="btn small quiet" data-act="selectMode" data-on="1">Select days</button>
     </div>`}
     <div class="mgrid-head">${letters.map(l => `<span>${l}</span>`).join("")}</div>
     <div class="mgrid">${cells.join("")}</div>
     ${dayPanel(selected)}`;
+}
+
+function monthPicker(label) {
+  const year = label.getFullYear();
+  const curMonth = label.getMonth();
+  const todayY = Number((S.state.date || "").slice(0, 4));
+  const todayM = Number((S.state.date || "").slice(5, 7)) - 1;
+  return `<div class="card form mpicker">
+    <div class="yearrow">
+      <button class="mnav small" data-act="pickYear" data-d="-1" aria-label="Previous year">${ICON.chevL}</button>
+      <div class="yr">${year}</div>
+      <button class="mnav small" data-act="pickYear" data-d="1" aria-label="Next year">${ICON.chevR}</button>
+    </div>
+    <div class="mgrid-months">
+      ${MONTHS.map((m, i) => `<button class="mopt ${i === curMonth ? "on" : ""} ${
+        i === todayM && year === todayY ? "istoday" : ""}"
+        data-act="pickMonth" data-m="${i}">${m.slice(0, 3)}</button>`).join("")}
+    </div>
+  </div>`;
 }
 
 function loadMonth(anchor) {
@@ -1441,6 +1471,27 @@ root.addEventListener("click", async e => {
       case "month": {
         S.month = shiftMonth(monthAnchor(), +node.dataset.d);
         S.monthData = null;
+        return render();
+      }
+      case "monthPicker": S.picking = !S.picking; return render();
+      case "pickYear": {
+        S.month = shiftMonth(monthAnchor(), 12 * (+node.dataset.d));
+        S.monthData = null;
+        return render();
+      }
+      case "pickMonth": {
+        const anchor = monthAnchor();
+        S.month = `${anchor.slice(0, 4)}-${String(+node.dataset.m + 1).padStart(2, "0")}-01`;
+        S.monthData = null;
+        S.picking = false;
+        return render();
+      }
+      case "monthToday": {
+        S.month = S.state.date.slice(0, 8) + "01";
+        S.day = S.state.date;
+        S.dayData = null;
+        S.monthData = null;
+        S.picking = false;
         return render();
       }
       case "newEvent":
