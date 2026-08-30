@@ -21,6 +21,8 @@ const S = {
   justDone: [],
   month: null,
   monthData: null,
+  selecting: false,
+  sel: [],
   toast: "",
   taskKind: "study",
   day: null,        // null means today
@@ -609,6 +611,20 @@ function monthAnchor() {
   return S.month || (S.state && S.state.date) || "";
 }
 
+function datesBetween(from, to) {
+  if (!from || !to || from > to) return [];
+  const out = [];
+  let d = from;
+  for (let i = 0; i < 400 && d <= to; i++) { out.push(d); d = shiftDay(d, 1); }
+  return out;
+}
+
+function shiftDay(date, delta) {
+  const d = new Date(date + "T12:00:00");
+  d.setDate(d.getDate() + delta);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function shiftMonth(anchor, delta) {
   const d = new Date(anchor + "T12:00:00");
   d.setDate(1);
@@ -641,7 +657,8 @@ function adminCalendar() {
     const isToday = d.date === st.date;
     const isSel = d.date === selected;
     const pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
-    cells.push(`<button class="mcell ${isToday ? "today" : ""} ${isSel ? "sel" : ""}"
+    const picked = S.sel.includes(d.date);
+    cells.push(`<button class="mcell ${isToday ? "today" : ""} ${isSel && !S.selecting ? "sel" : ""} ${picked ? "picked" : ""}"
       data-act="pickDay" data-date="${d.date}"
       aria-label="${d.date}, ${d.done} of ${d.total} done, ${d.events.length} events">
       <span class="mnum">${Number(d.date.slice(8))}</span>
@@ -651,12 +668,46 @@ function adminCalendar() {
     </button>`);
   }
 
+  const selBar = S.selecting ? `
+    <div class="card form selbar">
+      <div class="spread" style="margin-bottom:12px">
+        <div>
+          <div style="font-size:15px;font-weight:500">${S.sel.length} day${S.sel.length === 1 ? "" : "s"} selected</div>
+          <div class="meta" style="margin-top:3px">Tap days to add or remove them</div>
+        </div>
+        <div class="row">
+          ${S.sel.length ? `<button class="btn small quiet" data-act="clearSel">Clear</button>` : ""}
+          <button class="btn small" data-act="selectMode" data-on="0">Done</button>
+        </div>
+      </div>
+      <div class="grid2">
+        <div><label class="lab" for="r-from">From</label>
+          <input class="field" id="r-from" type="date" value="${esc(S.rangeFrom || S.state.date)}"></div>
+        <div><label class="lab" for="r-to">To</label>
+          <input class="field" id="r-to" type="date" value="${esc(S.rangeTo || S.state.date)}"></div>
+      </div>
+      <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn small accent" data-act="addRange">Add range</button>
+        <button class="btn small quiet" data-act="removeRange">Remove range</button>
+        <button class="btn small quiet" data-act="selWeekdays">Weekdays</button>
+        <button class="btn small quiet" data-act="selWeekends">Weekends</button>
+      </div>
+      ${S.sel.length ? `<div class="seldays">${S.sel.slice(0, 40).map(d =>
+        `<button class="selchip" data-act="unpickSel" data-date="${d}" title="Remove ${d}">${
+          Number(d.slice(8))}/${Number(d.slice(5, 7))} ×</button>`).join("")}${
+        S.sel.length > 40 ? `<span class="meta">+${S.sel.length - 40} more</span>` : ""}</div>` : ""}
+    </div>` : "";
+
   return `
+    ${selBar}
     <div class="mhead">
       <button class="btn quiet small" data-act="month" data-d="-1" aria-label="Previous month">‹</button>
       <div class="mtitle">${MONTHS[label.getMonth()]} ${label.getFullYear()}</div>
       <button class="btn quiet small" data-act="month" data-d="1" aria-label="Next month">›</button>
     </div>
+    ${S.selecting ? "" : `<div class="row" style="justify-content:flex-end;margin-bottom:12px">
+      <button class="btn small quiet" data-act="selectMode" data-on="1">Select days</button>
+    </div>`}
     <div class="mgrid-head">${letters.map(l => `<span>${l}</span>`).join("")}</div>
     <div class="mgrid">${cells.join("")}</div>
     ${dayPanel(selected)}`;
@@ -682,7 +733,7 @@ function dayPanel(date) {
     <div class="spread" style="margin-bottom:14px">
       <h2 class="section-title" style="margin:0">${esc(monthLabel(date))}</h2>
       <button class="btn small ${f ? "on" : "accent"}" data-act="${f ? "cancelForm" : "newEvent"}" data-date="${date}">
-        ${f ? "Cancel" : "Add something"}
+        ${f ? "Cancel" : S.sel.length > 1 ? `Add to ${S.sel.length} days` : "Add something"}
       </button>
     </div>
 
@@ -694,12 +745,15 @@ function dayPanel(date) {
           <div style="min-width:0">
             <h3 style="${e.done ? "text-decoration:line-through;opacity:.6" : ""}">${esc(e.title)}</h3>
             <div class="meta">${e.time ? esc(e.time) + " · " : ""}${
-              e.who.length ? esc(e.who.join(", ")) : "everyone"}${e.note ? " · " + esc(e.note) : ""}</div>
+              e.who.length ? esc(e.who.join(", ")) : "everyone"}${e.note ? " · " + esc(e.note) : ""}${
+              e.groupSize > 1 ? " · 1 of " + e.groupSize + " days" : ""}</div>
           </div>
           <div class="row">
             <button class="btn small quiet" data-act="toggleEvent" data-id="${e.id}">${e.done ? "Undo" : "Done"}</button>
             <button class="btn small quiet" data-act="editEvent" data-id="${e.id}">Edit</button>
             <button class="btn small quiet" data-act="deleteEvent" data-id="${e.id}">Remove</button>
+            ${e.groupSize > 1 ? `<button class="btn small quiet" data-act="deleteSeries" data-id="${e.id}"
+              title="Remove this from all ${e.groupSize} days">Remove all ${e.groupSize}</button>` : ""}
           </div>
         </div>
       </div>`).join("")}
@@ -733,11 +787,16 @@ function eventForm(f) {
       <div><label class="lab" for="e-title">What</label>
         <input class="field" id="e-title" value="${esc(f.title || "")}" placeholder="Dentist, football, grandma visits…"></div>
       <div class="grid2">
-        <div><label class="lab" for="e-date">Date</label>
-          <input class="field" id="e-date" type="date" value="${esc(f.date || "")}"></div>
+        ${f.dates && f.dates.length > 1
+          ? `<div><label class="lab">Days</label>
+               <div class="field" style="box-shadow:var(--in-sm)">${f.dates.length} days selected</div></div>`
+          : `<div><label class="lab" for="e-date">Date</label>
+               <input class="field" id="e-date" type="date" value="${esc(f.date || "")}"></div>`}
         <div><label class="lab" for="e-time">Time (optional)</label>
           <input class="field" id="e-time" type="time" value="${esc(f.time || "")}"></div>
       </div>
+      ${f.dates && f.dates.length > 1 ? `<div class="meta">${
+        f.dates[0]} → ${f.dates[f.dates.length - 1]}, one entry per day so each can be ticked off separately.</div>` : ""}
       <div><label class="lab" for="e-note">Note (optional)</label>
         <input class="field" id="e-note" value="${esc(f.note || "")}" placeholder="Bring kit"></div>
       <div><label class="lab">Who</label>
@@ -1298,7 +1357,7 @@ async function reloadMonth() {
 function readEventForm(f) {
   if (el("#e-title")) {
     f.title = val("e-title");
-    f.date = val("e-date");
+    if (el("#e-date")) { f.date = val("e-date"); f.dates = [f.date]; }
     f.time = val("e-time");
     f.note = val("e-note");
   }
@@ -1332,10 +1391,51 @@ root.addEventListener("click", async e => {
       case "theme": cycleTheme(); return render();
       case "pickDay": {
         const date = node.dataset.date;
+        if (S.selecting) {
+          S.sel = S.sel.includes(date)
+            ? S.sel.filter(d => d !== date)
+            : [...S.sel, date].sort();
+          return render();
+        }
         S.day = date;
         if (date === S.state.date) { S.dayData = null; return render(); }
         render();
         S.dayData = await post("day", { date });
+        return render();
+      }
+      case "selectMode":
+        S.selecting = node.dataset.on === "1";
+        if (!S.selecting) S.sel = [];
+        S.form = null;
+        return render();
+      case "clearSel": S.sel = []; return render();
+      case "unpickSel":
+        S.sel = S.sel.filter(d => d !== node.dataset.date);
+        return render();
+      case "addRange":
+      case "removeRange": {
+        const from = val("r-from"), to = val("r-to");
+        if (!from || !to) return toast("Pick both dates.");
+        const span = datesBetween(from, to);
+        if (!span.length) return toast("That range is the wrong way round.");
+        if (span.length > 366) return toast("That's more than a year.");
+        S.rangeFrom = from; S.rangeTo = to;
+        S.sel = act === "addRange"
+          ? [...new Set(S.sel.concat(span))].sort()
+          : S.sel.filter(d => !span.includes(d));
+        return render();
+      }
+      case "selWeekdays":
+      case "selWeekends": {
+        const wantWeekend = act === "selWeekends";
+        const from = val("r-from") || S.state.date, to = val("r-to") || S.state.date;
+        const span = datesBetween(from, to).filter(d => {
+          const dow = new Date(d + "T12:00:00").getDay();
+          return wantWeekend ? (dow === 0 || dow === 6) : (dow > 0 && dow < 6);
+        });
+        if (!span.length) return toast("Nothing in that range.");
+        S.rangeFrom = from; S.rangeTo = to;
+        S.sel = [...new Set(S.sel.concat(span))].sort();
         return render();
       }
       case "month": {
@@ -1344,7 +1444,11 @@ root.addEventListener("click", async e => {
         return render();
       }
       case "newEvent":
-        S.form = { kind: "event", id: "", title: "", date: node.dataset.date, time: "", note: "", childIds: [] };
+        S.form = {
+          kind: "event", id: "", title: "", time: "", note: "", childIds: [],
+          date: node.dataset.date,
+          dates: S.sel.length ? S.sel.slice() : [node.dataset.date],
+        };
         return render();
       case "editEvent": {
         const ev = (S.monthData.days.flatMap(d => d.events)).find(e => e.id === node.dataset.id);
@@ -1355,10 +1459,12 @@ root.addEventListener("click", async e => {
         const f = S.form && S.form.kind === "event" ? S.form : { kind: "event", childIds: [] };
         readEventForm(f);
         if (!f.title) return toast("Give it a name.");
-        await post("saveEvent", f);
+        const result = await post("saveEvent", f);
+        const n = result.count || 1;
         S.form = null;
+        if (!f.id) { S.sel = []; S.selecting = false; }
         await reloadMonth();
-        return toast(f.id ? "Updated" : "Added");
+        return toast(f.id ? "Updated" : n > 1 ? `Added to ${n} days` : "Added");
       }
       case "eventWho": {
         const f = S.form && S.form.kind === "event" ? S.form : null;
@@ -1378,6 +1484,12 @@ root.addEventListener("click", async e => {
         if (!confirm("Remove this?")) return;
         await post("deleteEvent", { id: node.dataset.id });
         return reloadMonth();
+      case "deleteSeries": {
+        if (!confirm("Remove this from every day it's on?")) return;
+        const r = await post("deleteEvent", { id: node.dataset.id, group: true });
+        await reloadMonth();
+        return toast(`Removed from ${r.removed} days`);
+      }
       case "credit":
         await post("credit", {
           taskId: node.dataset.task, childId: node.dataset.child, date: node.dataset.date,

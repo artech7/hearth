@@ -122,6 +122,10 @@ Day records are rebuilt from the logs rather than stored, so editing or deleting
 
 The **Plan** tab is a month calendar. Each day shows a bar for how much of that day's work got done and a dot per scheduled event. Picking a day opens a panel underneath with everything on it.
 
+**Scheduling across days.** Hit **Select days** in the planner to pick a span: set a from/to range, or use the Weekdays and Weekends shortcuts, then tap individual days to add or drop them. The selection shows as chips you can dismiss one at a time. Adding an item then applies it to every selected day.
+
+Each day gets its own entry, so a child can tick off Tuesday without touching Thursday, and editing one day changes only that day. Entries created together stay linked: an item on more than one day shows "1 of 6 days" and offers **Remove all** next to the single-day remove.
+
 **Events** are anything that isn't a task: appointments, visits, matches. They carry a name, a date, an optional time and note, and either apply to everyone or to specific children. Children see their own on their Today tab under "What's on" and can tick them off; only a parent can create, edit, or remove them.
 
 **Marking past work done.** From that day panel, any task that wasn't completed shows a **Mark done** button, which awards the full points and counts toward history and streaks — for when someone did the job and nobody remembered to check it off. It works on today and any past day, never a future one, and refuses a task that wasn't scheduled that day or belongs to another child. Undo reverses it.

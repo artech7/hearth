@@ -462,10 +462,18 @@ function dayRecord(childId, date) {
   return { date, total: scheduled.length, done, points };
 }
 
+function groupSize(groupId) {
+  return groupId ? db.events.filter(e => e.groupId === groupId).length : 1;
+}
+
 function eventsOn(date, childId) {
   return db.events
     .filter(e => e.date === date && (!childId || eventVisibleTo(e, childId)))
-    .map(e => ({ ...e, who: e.childIds.map(cid => (db.users.find(u => u.id === cid) || {}).name).filter(Boolean) }))
+    .map(e => ({
+      ...e,
+      who: e.childIds.map(cid => (db.users.find(u => u.id === cid) || {}).name).filter(Boolean),
+      groupSize: groupSize(e.groupId),
+    }))
     .sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
 }
 
@@ -646,29 +654,54 @@ async function api(req, res, route) {
   if (route === "saveEvent") {
     if (!isAdmin) return deny();
     const title = str(body.title, 80);
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(body.date || "")) ? body.date : null;
     if (!title) return json(res, 400, { error: "Give it a name." });
-    if (!date) return json(res, 400, { error: "Pick a date." });
-    const fields = {
+
+    const valid = d => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ""));
+    // One item can be scheduled across many days. Each day gets its own record
+    // so a child can tick off Tuesday without touching Thursday.
+    let dates = Array.isArray(body.dates) ? body.dates.filter(valid) : [];
+    if (!dates.length && valid(body.date)) dates = [body.date];
+    dates = [...new Set(dates)].sort();
+    if (!dates.length) return json(res, 400, { error: "Pick at least one date." });
+    if (dates.length > 366) return json(res, 400, { error: "That's more than a year of days." });
+
+    const shared = {
       title,
-      date,
       time: /^\d{2}:\d{2}$/.test(String(body.time || "")) ? body.time : "",
       note: str(body.note, 300),
       childIds: Array.isArray(body.childIds)
         ? body.childIds.filter(cid => db.users.some(u => u.id === cid && u.role === "child")) : [],
     };
+
     const existing = db.events.find(e => e.id === body.id);
-    if (existing) Object.assign(existing, fields);
-    else db.events.push(Object.assign({ id: id("e"), done: false }, fields));
+    if (existing) {
+      // Editing touches the one day you opened, not the whole series.
+      Object.assign(existing, shared, { date: dates[0] });
+      save();
+      return json(res, 200, { ok: true, count: 1 });
+    }
+
+    const groupId = dates.length > 1 ? id("g") : null;
+    for (const date of dates) {
+      db.events.push(Object.assign({ id: id("e"), done: false, groupId, date }, shared));
+    }
     save();
-    return json(res, 200, { ok: true });
+    return json(res, 200, { ok: true, count: dates.length });
   }
 
   if (route === "deleteEvent") {
     if (!isAdmin) return deny();
+    const target = db.events.find(e => e.id === body.id);
+    if (!target) return json(res, 404, { error: "Not found." });
+    if (body.group && target.groupId) {
+      const before = db.events.length;
+      db.events = db.events.filter(e => e.groupId !== target.groupId);
+      save();
+      return json(res, 200, { ok: true, removed: before - db.events.length });
+    }
     db.events = db.events.filter(e => e.id !== body.id);
     save();
-    return json(res, 200, { ok: true });
+    return json(res, 200, { ok: true, removed: 1 });
   }
 
   if (route === "toggleEvent") {
@@ -703,7 +736,11 @@ async function api(req, res, route) {
         date, total, done,
         events: db.events
           .filter(e => e.date === date && (user.role !== "child" || eventVisibleTo(e, user.id)))
-          .map(e => ({ ...e, who: e.childIds.map(cid => (db.users.find(u => u.id === cid) || {}).name).filter(Boolean) }))
+          .map(e => ({
+            ...e,
+            who: e.childIds.map(cid => (db.users.find(u => u.id === cid) || {}).name).filter(Boolean),
+            groupSize: groupSize(e.groupId),
+          }))
           .sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99")),
       });
     }
