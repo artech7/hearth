@@ -153,6 +153,7 @@ const ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
   pause: '<svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>',
   check: '<svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>',
+  cal: '<svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 8v9H5v-9h14zM7 12v2h2v-2H7zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2z"/></svg>',
   chevL: '<svg viewBox="0 0 24 24"><path d="M15.4 4.6 13.9 3l-9 9 9 9 1.5-1.6L8 12z"/></svg>',
   chevR: '<svg viewBox="0 0 24 24"><path d="M8.6 3 7.1 4.6 14 12l-6.9 7.4L8.6 21l9-9z"/></svg>',
   back: '<svg viewBox="0 0 24 24"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>',
@@ -716,9 +717,13 @@ function adminCalendar() {
     ${anchor.slice(0, 7) === st.date.slice(0, 7) ? "" : `<div class="row" style="justify-content:center;margin-bottom:14px">
       <button class="btn small quiet" data-act="monthToday">Back to ${MONTHS[new Date(st.date + "T12:00:00").getMonth()]}</button>
     </div>`}
-    ${S.selecting ? "" : `<div class="row" style="justify-content:flex-end;margin-bottom:12px">
-      <button class="btn small quiet" data-act="selectMode" data-on="1">Select days</button>
-    </div>`}
+    ${S.selecting ? "" : `<button class="bigbtn" data-act="selectMode" data-on="1">
+      ${ICON.cal}
+      <span>
+        <b>Select days</b>
+        <small>Schedule something across a range</small>
+      </span>
+    </button>`}
     <div class="mgrid-head">${letters.map(l => `<span>${l}</span>`).join("")}</div>
     <div class="mgrid">${cells.join("")}</div>
     ${dayPanel(selected)}`;
