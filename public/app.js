@@ -228,6 +228,106 @@ async function submitPin() {
 }
 
 
+// Reward icons. Drawn here rather than pulled from a library so the app keeps
+// working with no network and no third-party assets. Solid silhouettes on a
+// 24x24 grid, which is what survives being shrunk into a medallion.
+const REWARD_ICONS = [
+  { id: "film", name: "Movie", words: ["movie", "film", "cinema", "netflix", "show"],
+    d: "M3 4h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm2 2v2h2V6H5zm12 0v2h2V6h-2zM5 10v4h14v-4H5zm0 6v2h2v-2H5zm12 0v2h2v-2h-2z" },
+
+  { id: "popcorn", name: "Popcorn", words: ["popcorn", "snack", "treat"],
+    d: "M6 9h12l-1.3 11.1a1 1 0 0 1-1 .9H8.3a1 1 0 0 1-1-.9L6 9zm1.2-2a2.6 2.6 0 0 1 2.2-3.4A2.7 2.7 0 0 1 12 2a2.7 2.7 0 0 1 2.6 1.6A2.6 2.6 0 0 1 16.8 7H7.2z" },
+
+  { id: "gamepad", name: "Game", words: ["game", "gaming", "xbox", "playstation", "console", "video game"],
+    d: "M7 7h10a5 5 0 0 1 5 5.2l-.3 4.3A2.6 2.6 0 0 1 19 19a2.6 2.6 0 0 1-2.2-1.2L15.4 16H8.6l-1.4 1.8A2.6 2.6 0 0 1 5 19a2.6 2.6 0 0 1-2.7-2.5L2 12.2A5 5 0 0 1 7 7zm-1 3v1.5H4.5v2H6V15h2v-1.5h1.5v-2H8V10H6zm9 .5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5zm2.5 3a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5z" },
+
+  { id: "screen", name: "Screen time", words: ["screen", "tablet", "ipad", "phone", "youtube", "tv"],
+    d: "M3 4h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-7v2h3v2H7v-2h3v-2H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v9h16V6H4z" },
+
+  { id: "dinner", name: "Pick a meal", words: ["dinner", "lunch", "breakfast", "meal", "food", "cook", "menu", "restaurant"],
+    d: "M5 2h1.6l.5 7.2a2.2 2.2 0 0 1-1.3 2.2V22H4V11.4a2.2 2.2 0 0 1-1.3-2.2L3.2 2h1.6l.3 6h.6l.3-6zM16 2c2.6 0 4.5 3 4.5 7 0 2.8-1 4.6-2.5 5.3V22h-2.2V2H16z" },
+
+  { id: "pizza", name: "Pizza", words: ["pizza", "takeaway", "takeout"],
+    d: "M12 2c4.2 0 8 2 10 5L12 22 2 7c2-3 5.8-5 10-5zm0 3.2c-2.6 0-5 1-6.6 2.6l1.1 1.7A8 8 0 0 1 12 7.4c2.2 0 4.2.8 5.5 2.1l1.1-1.7A10 10 0 0 0 12 5.2zM10 11a1.4 1.4 0 1 0 0 2.8A1.4 1.4 0 0 0 10 11zm3.2 4a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8z" },
+
+  { id: "icecream", name: "Ice cream", words: ["ice cream", "icecream", "dessert", "sundae", "gelato"],
+    d: "M12 2a5 5 0 0 1 4.9 4.1A3.3 3.3 0 0 1 16.4 12H7.6a3.3 3.3 0 0 1-.5-5.9A5 5 0 0 1 12 2zM8.2 14h7.6l-3 8a1 1 0 0 1-1.6 0l-3-8z" },
+
+  { id: "cake", name: "Cake", words: ["cake", "birthday", "baking", "bake"],
+    d: "M11 2h2v3h-2V2zM7 7h10a3 3 0 0 1 3 3v1.4c-1 0-1.4.9-2.5.9s-1.6-.9-2.6-.9-1.5.9-2.6.9-1.6-.9-2.6-.9-1.5.9-2.6.9c-1 0-1.5-.9-2.5-.9V10a3 3 0 0 1 3-3zM4 14.2c1 0 1.5.8 2.5.8s1.6-.9 2.6-.9 1.5.9 2.6.9 1.6-.9 2.6-.9 1.5.9 2.6.9c1 0 1.5-.8 2.5-.8V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-5.8z" },
+
+  { id: "book", name: "Book", words: ["book", "reading", "read", "comic", "library", "story"],
+    d: "M4 3h6a3 3 0 0 1 2 .8V21a3 3 0 0 0-2-.8H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm16 0a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1h-6a3 3 0 0 0-2 .8V3.8A3 3 0 0 1 14 3h6z" },
+
+  { id: "music", name: "Music", words: ["music", "song", "spotify", "album", "concert"],
+    d: "M20 3v12.5a3.5 3.5 0 1 1-2-3.16V7.6L10 9.4v8.1a3.5 3.5 0 1 1-2-3.16V6.2a1 1 0 0 1 .8-1l10-2.2A1 1 0 0 1 20 3z" },
+
+  { id: "headphones", name: "Headphones", words: ["headphones", "audio", "podcast", "listen"],
+    d: "M12 2a9 9 0 0 1 9 9v7a3 3 0 0 1-3 3h-2v-9h3v-1a7 7 0 1 0-14 0v1h3v9H6a3 3 0 0 1-3-3v-7a9 9 0 0 1 9-9z" },
+
+  { id: "ball", name: "Sport", words: ["football", "soccer", "ball", "sport", "basketball", "match", "game night"],
+    d: "M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 3.2-3.4 2.4 1.3 4h4.2l1.3-4L12 5.2zM4.6 10.4l-.4 1.6a8 8 0 0 0 1.7 5l1.9-.4 1.3-4-3.2-2.3zm14.8 0-3.2 2.3 1.3 4 1.9.4a8 8 0 0 0 1.7-5l-.4-1.6zM9.2 17.6l-1 1.7a8 8 0 0 0 7.6 0l-1-1.7H9.2z" },
+
+  { id: "bike", name: "Bike ride", words: ["bike", "cycle", "bicycle", "ride", "scooter"],
+    d: "M5.5 14a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zm13 0a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zM14 3h4v2h-2.6l1.1 2.5 1.6 4H16l-1.3-3.3L11 11.6V17H9v-6.4l3.7-2.7L11.6 5H8V3h4z" },
+
+  { id: "swim", name: "Swimming", words: ["swim", "pool", "beach", "water"],
+    d: "M16.8 3.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2zM4.6 12.6l5.8-3.3 3 2.2 3.3-1.2.8 2.1-4.4 1.6-2.5-1.8-4.8 2.8-1.2-2.4zM2 17c1.4 0 2.2.5 2.9.9.6.4 1 .6 1.7.6s1.1-.2 1.7-.6c.7-.4 1.5-.9 2.9-.9s2.2.5 2.9.9c.6.4 1 .6 1.7.6s1.1-.2 1.7-.6c.7-.4 1.5-.9 2.9-.9v2.3c-.7 0-1.1.2-1.7.6-.7.4-1.5.9-2.9.9s-2.2-.5-2.9-.9c-.6-.4-1-.6-1.7-.6s-1.1.2-1.7.6c-.7.4-1.5.9-2.9.9s-2.2-.5-2.9-.9c-.6-.4-1-.6-1.7-.6V17z" },
+
+  { id: "outdoors", name: "Outdoors", words: ["park", "outside", "walk", "hike", "camp", "forest"],
+    d: "M12 2l5 8h-2.5l4 6H13v6h-2v-6H5.5l4-6H7l5-8z" },
+
+  { id: "trip", name: "Trip out", words: ["trip", "drive", "car", "outing", "zoo", "museum", "day out"],
+    d: "M6.5 5h11a2 2 0 0 1 1.9 1.4L21 11v7a1 1 0 0 1-1 1h-1.5a1 1 0 0 1-1-1v-1h-11v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-7l1.6-4.6A2 2 0 0 1 6.5 5zm-.4 2.5L5 11h14l-1.1-3.5H6.1zM6 13a1.4 1.4 0 1 0 0 2.8A1.4 1.4 0 0 0 6 13zm12 0a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8z" },
+
+  { id: "coin", name: "Pocket money", words: ["money", "cash", "coin", "pocket money", "allowance", "buy"],
+    d: "M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm.9 3.5h-1.8v1.3c-1.7.2-2.9 1.2-2.9 2.8 0 1.9 1.6 2.5 3.1 2.9 1.4.4 1.9.7 1.9 1.3 0 .6-.6 1-1.5 1-1.1 0-1.8-.5-1.9-1.4H7.9c.1 1.7 1.3 2.7 3.2 2.9v1.3h1.8v-1.3c1.8-.2 3-1.3 3-2.9 0-1.9-1.6-2.5-3.2-2.9-1.3-.4-1.8-.6-1.8-1.2 0-.6.5-1 1.4-1 1 0 1.6.5 1.7 1.3h1.9c-.1-1.6-1.2-2.6-3-2.8V5.5z" },
+
+  { id: "gift", name: "Gift", words: ["gift", "present", "surprise", "prize", "toy"],
+    d: "M11 8H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1.6A2.8 2.8 0 0 1 8 1.6c1.3 0 2.2.7 3 1.7l1 1.2 1-1.2c.8-1 1.7-1.7 3-1.7A2.8 2.8 0 0 1 19.4 5H21a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-8zM8 3.4c-.6 0-1 .4-1 .9s.4.7 1 .7h1.9L9.2 4c-.3-.4-.7-.6-1.2-.6zm8 0c-.5 0-.9.2-1.2.6l-.7 1H16c.6 0 1-.2 1-.7s-.4-.9-1-.9zM3.6 10H11v12H4.6a1 1 0 0 1-1-1V10zm9.4 0h7.4v11a1 1 0 0 1-1 1H13V10z" },
+
+  { id: "bed", name: "Late bedtime", words: ["bed", "late", "sleepover", "stay up", "bedtime", "sleep"],
+    d: "M2 6h2v6h8V8h6a4 4 0 0 1 4 4v6h-2v-3H4v3H2V6zm5 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" },
+
+  { id: "paw", name: "Pet time", words: ["pet", "dog", "cat", "puppy", "walk the dog", "animal"],
+    d: "M12 13.5c2.6 0 5.5 2.2 5.5 4.6 0 1.6-1.2 2.4-2.8 2.4-1 0-1.9-.4-2.7-.4s-1.7.4-2.7.4c-1.6 0-2.8-.8-2.8-2.4 0-2.4 2.9-4.6 5.5-4.6zM6.2 8.4c1.2 0 2 1.2 1.9 2.7-.1 1.5-1.1 2.7-2.3 2.7s-2-1.2-1.9-2.7c.1-1.5 1.1-2.7 2.3-2.7zm11.6 0c1.2 0 2.2 1.2 2.3 2.7.1 1.5-.7 2.7-1.9 2.7s-2.2-1.2-2.3-2.7c-.1-1.5.7-2.7 1.9-2.7zM9.6 3c1.2 0 2.1 1.3 2.1 2.9s-.9 2.9-2.1 2.9-2.1-1.3-2.1-2.9S8.4 3 9.6 3zm4.8 0c1.2 0 2.1 1.3 2.1 2.9s-.9 2.9-2.1 2.9-2.1-1.3-2.1-2.9S13.2 3 14.4 3z" },
+
+  { id: "ticket", name: "Ticket", words: ["ticket", "event", "show", "theatre", "theater", "match ticket"],
+    d: "M3 5h18a1 1 0 0 1 1 1v3.5a2.5 2.5 0 0 0 0 5V18a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-3.5a2.5 2.5 0 0 0 0-5V6a1 1 0 0 1 1-1zm12 2v2h2V7h-2zm0 4v2h2v-2h-2zm0 4v2h2v-2h-2z" },
+
+  { id: "clock", name: "Extra time", words: ["time", "extra", "hour", "minutes", "later"],
+    d: "M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm-1 4v7l5.2 3.1 1-1.7-4.2-2.5V6h-2z" },
+
+  { id: "star", name: "Something special", words: ["special", "treat", "reward", "choice", "wish"],
+    d: "M12 2l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.8 5.7 21.4l1.5-7.1L1.8 9.4 9 8.6 12 2z" },
+
+  { id: "flame", name: "Hearth", words: [],
+    d: "M12 2c1 5 6 6.4 6 11a6 6 0 0 1-12 0c0-3 2.6-4.4 3.5-7 1.4 1.8 2.5-.8 2.5-4zm0 10c.4 2.2 2.5 2.8 2.5 4.7a2.5 2.5 0 0 1-5 0c0-1.5 2-2.2 2.5-4.7z" },
+];
+
+// A reward with no icon chosen gets the closest match to its name.
+function guessIcon(title) {
+  const t = String(title || "").toLowerCase();
+  let best = null;
+  for (const icon of REWARD_ICONS) {
+    for (const w of icon.words) {
+      if (t.includes(w) && (!best || w.length > best.len)) best = { id: icon.id, len: w.length };
+    }
+  }
+  return best ? best.id : "star";
+}
+
+function iconFor(title, chosen) {
+  return REWARD_ICONS.find(i => i.id === chosen)
+    || REWARD_ICONS.find(i => i.id === guessIcon(title))
+    || REWARD_ICONS[REWARD_ICONS.length - 1];
+}
+
+function iconSvg(icon, size) {
+  return `<svg viewBox="0 0 24 24" width="${size || 24}" height="${size || 24}"
+    aria-hidden="true"><path d="${icon.d}"/></svg>`;
+}
+
 /* ---------- reward scenes ---------- */
 
 // Each reward gets a scene generated from its own name, so a reward added
@@ -545,10 +645,12 @@ function childRewards() {
     ${balanceCard(st.me)}
     ${st.rewards.length ? `<div class="reward-grid">` + st.rewards.map(r => {
       const afford = st.me.points >= r.cost;
+      const ic = iconFor(r.title, r.icon);
       return `<div class="rcard" data-scene="${esc(r.id)}">
         ${rewardScene(r.title + r.id, r.id.replace(/[^a-zA-Z0-9]/g, ""), r.sky)}
         <div class="rcard-body">
           <div style="min-width:0">
+            <span class="rmedal" title="${esc(ic.name)}">${iconSvg(ic, 22)}</span>
             <h3>${esc(r.title)}</h3>
             <div class="cost">${r.cost} POINTS${afford ? "" : ` · ${r.cost - st.me.points} TO GO`}</div>
           </div>
@@ -1051,7 +1153,7 @@ function adminTasks() {
 
 function adminRewards() {
   const st = S.state;
-  const f = formState("reward", { id: "", title: "", cost: 25, childIds: [], sky: "" });
+  const f = formState("reward", { id: "", title: "", cost: 25, childIds: [], sky: "", icon: "" });
   const previewTitle = f.title || "Reward name";
 
   return `
@@ -1062,6 +1164,19 @@ function adminRewards() {
           <input class="field" id="r-title" value="${esc(f.title)}" placeholder="Movie night, later bedtime…"></div>
         <div><label class="lab" for="r-cost">Cost in points</label>
           <input class="field" id="r-cost" type="number" min="1" max="10000" value="${f.cost}"></div>
+        <div>
+          <label class="lab">Icon</label>
+          <div class="icon-picker">
+            <button type="button" class="ibtn auto ${f.icon ? "" : "on"}" data-act="pickIcon" data-icon=""
+              title="Chosen from the reward's name">Auto</button>
+            ${REWARD_ICONS.map(i => `<button type="button" class="ibtn ${f.icon === i.id ? "on" : ""}"
+              data-act="pickIcon" data-icon="${i.id}" title="${esc(i.name)}"
+              aria-label="${esc(i.name)}">${iconSvg(i, 20)}</button>`).join("")}
+          </div>
+          <div class="meta" style="margin-top:8px">${
+            f.icon ? esc(iconFor(f.title || "", f.icon).name)
+                   : "Auto, from the name: " + esc(iconFor(f.title || "Reward", "").name)}</div>
+        </div>
         <div>
           <label class="lab">Card sky</label>
           <div class="sky-picker">
@@ -1075,6 +1190,7 @@ function adminRewards() {
             ${rewardScene(previewTitle + (f.id || "preview"), "prev", f.sky)}
             <div class="rcard-body">
               <div style="min-width:0">
+                <span class="rmedal">${iconSvg(iconFor(previewTitle, f.icon), 20)}</span>
                 <h3>${esc(previewTitle)}</h3>
                 <div class="cost">${f.cost || 0} POINTS</div>
               </div>
@@ -1097,7 +1213,7 @@ function adminRewards() {
       <div class="spread">
         <div>
           <h3>${esc(r.title)}</h3>
-          <div class="meta">${r.cost} pts · ${r.childIds.length ? r.childIds.map(cid => (st.children.find(c => c.id === cid) || {}).name).join(", ") : "everyone"} · ${esc(skyFor(r.title + r.id, r.sky).name.toLowerCase())}${r.sky ? "" : " (auto)"}</div>
+          <div class="meta">${r.cost} pts · ${r.childIds.length ? r.childIds.map(cid => (st.children.find(c => c.id === cid) || {}).name).join(", ") : "everyone"} · ${esc(iconFor(r.title, r.icon).name.toLowerCase())} · ${esc(skyFor(r.title + r.id, r.sky).name.toLowerCase())}</div>
         </div>
         <div class="row">
           <button class="btn small quiet" data-act="editReward" data-id="${r.id}">Edit</button>
@@ -1613,6 +1729,12 @@ root.addEventListener("click", async e => {
         f.days = f.days.includes(i) ? f.days.filter(d => d !== i) : f.days.concat(i).sort();
         readTaskForm(f); return render();
       }
+      case "pickIcon": {
+        const f = formState("reward", { childIds: [] });
+        readRewardForm(f);
+        f.icon = node.dataset.icon;
+        return render();
+      }
       case "pickSky": {
         const f = formState("reward", { childIds: [] });
         readRewardForm(f);
@@ -1651,7 +1773,7 @@ root.addEventListener("click", async e => {
 
       case "editReward": {
         const r = S.state.rewards.find(x => x.id === node.dataset.id);
-        S.form = Object.assign({ kind: "reward", sky: "" }, r); return render();
+        S.form = Object.assign({ kind: "reward", sky: "", icon: "" }, r); return render();
       }
       case "saveReward": {
         const f = formState("reward", { id: "", childIds: [] });
@@ -1703,6 +1825,7 @@ function readRewardForm(f) {
   if (el("#r-title")) { f.title = val("r-title"); f.cost = +val("r-cost"); }
   if (!f.childIds) f.childIds = [];
   if (f.sky === undefined) f.sky = "";
+  if (f.icon === undefined) f.icon = "";
 }
 
 function readUserForm(f) {

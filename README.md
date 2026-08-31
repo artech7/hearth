@@ -84,6 +84,8 @@ Set each child's weekly amount in the Family tab. Lowering it applies immediatel
 
 ## Rewards
 
+Each reward card carries an **icon** — a film reel for movie night, a gamepad for game time, cutlery for picking a meal. Twenty-four are built in, drawn as part of the app rather than pulled from a CDN so nothing breaks offline. Leave it on Auto and the icon is matched from the reward's name; override it from the picker in the Rewards form when the guess is wrong.
+
 Parents create rewards with a point cost, either for everyone or for specific children. A child redeems one, points come out immediately, and the request goes to the parent queue. Marking it **Given** completes it; **Refund** returns the points to the buckets they came from — though allowance refunded after the week has turned comes back as savings, since that week's allowance no longer exists.
 
 The ±5 buttons in the Family tab adjust **savings**, not allowance, so a manual reward or penalty behaves like earned points.

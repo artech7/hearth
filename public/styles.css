@@ -862,3 +862,56 @@ label.lab { display: block; font-size: 12.5px; color: var(--muted); margin-botto
   color: var(--muted);
   margin-top: 2px;
 }
+
+/* ---- reward icons ---- */
+
+/* A struck medallion sitting on the scene, lit like the hearth behind it. */
+.rmedal {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: rgba(18, 24, 20, .55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .16),
+    0 4px 14px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(3px);
+}
+.rmedal svg { fill: #F0B45B; }
+
+.rcard.preview .rmedal { width: 34px; height: 34px; margin-bottom: 8px; }
+
+.icon-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 56px));
+  justify-content: start;
+  gap: 8px;
+}
+
+.ibtn {
+  height: 42px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  box-shadow: var(--out-xs);
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+.ibtn svg { fill: var(--muted); transition: fill 150ms ease; }
+.ibtn:hover { transform: translateY(-1px); }
+.ibtn:hover svg { fill: var(--ink); }
+.ibtn.on {
+  box-shadow: var(--in-sm), 0 0 0 2px var(--bg), 0 0 0 3px var(--accent);
+}
+.ibtn.on svg { fill: var(--accent-ink); }
+
+.ibtn.auto {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+.ibtn.auto.on { color: var(--accent-ink); }
