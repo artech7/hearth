@@ -137,7 +137,7 @@ Each day gets its own entry, so a child can tick off Tuesday without touching Th
 
 A snapshot of `data.json` is written to a `backups/` folder beside it — once at startup if the last one is stale, then daily, keeping the most recent 14. `BACKUP_DIR` and `KEEP_BACKUPS` change either.
 
-From the Family tab a parent can **Download** the current data as a file, or take a **Snapshot now**. Downloading is the one that matters: a backup living in the same volume as the data doesn't survive losing the volume.
+From **Settings** — the gear in the parent header — a parent can **Download** the current data as a file, take a **Snapshot now**, and see which snapshots exist. Downloading is the one that matters: a backup living in the same volume as the data doesn't survive losing the volume.
 
 ```bash
 sudo docker exec hearth node server.js --list-backups
@@ -153,6 +153,8 @@ A restore validates the file before touching anything and copies the current dat
 Every movement of points is recorded: work finished, chores approved, retroactive completions, parent adjustments, undos, redemptions, refunds, the weekly allowance grant, and allowance that expired unspent. Each entry keeps the amount, which bucket it touched, the reason, who did it, and the balance afterwards.
 
 Children see **Where your points went** on their Rewards tab. Parents get a **Points log** button per child in the Family tab.
+
+Household settings — backups, the week start day, and the recovery commands — live under the gear in the parent header, away from the day-to-day screens.
 
 The point is answerable questions. When a child says they had more points yesterday, the log says what happened and who did it — which matters in a system whose job is being fair between siblings.
 

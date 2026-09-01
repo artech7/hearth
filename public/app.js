@@ -26,6 +26,8 @@ const S = {
   sel: [],
   toast: "",
   taskKind: "study",
+  settingsOpen: false,
+  backups: null,
   ledger: null,
   ledgerChild: null,
   ledgerLimit: 8,
@@ -160,6 +162,7 @@ const ICON = {
   chevL: '<svg viewBox="0 0 24 24"><path d="M15.4 4.6 13.9 3l-9 9 9 9 1.5-1.6L8 12z"/></svg>',
   chevR: '<svg viewBox="0 0 24 24"><path d="M8.6 3 7.1 4.6 14 12l-6.9 7.4L8.6 21l9-9z"/></svg>',
   back: '<svg viewBox="0 0 24 24"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>',
+  gear: '<svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9.4 4c0 .5 0 1-.1 1.5l2.1 1.6-2 3.5-2.5-1a7.6 7.6 0 0 1-2.6 1.5L16 22h-4l-.3-2.4a7.6 7.6 0 0 1-2.6-1.5l-2.5 1-2-3.5 2.1-1.6a8.7 8.7 0 0 1 0-3L2.6 9.4l2-3.5 2.5 1A7.6 7.6 0 0 1 9.7 5.4L10 3h4l.3 2.4c.9.3 1.8.8 2.6 1.5l2.5-1 2 3.5-2.1 1.6c.1.5.1 1 .1 1.5z"/></svg>',
   system: '<svg viewBox="0 0 24 24"><path d="M4 5h16v10H4zm0 12h16v2H4z"/></svg>',
   sun: '<svg viewBox="0 0 24 24"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5h0v3h0zm-1 0h2v3h-2zm0 19h2v3h-2zM2 11h3v2H2zm17 0h3v2h-3zM4.2 5.6l1.4-1.4 2.1 2.1-1.4 1.4zM16.3 17.7l1.4-1.4 2.1 2.1-1.4 1.4zM4.2 18.4l2.1-2.1 1.4 1.4-2.1 2.1zM16.3 6.3l2.1-2.1 1.4 1.4-2.1 2.1z"/></svg>',
   moon: '<svg viewBox="0 0 24 24"><path d="M12.3 3a7.5 7.5 0 1 0 8.7 9.6A6.5 6.5 0 0 1 12.3 3z"/></svg>',
@@ -1013,6 +1016,94 @@ function tabBar(labels) {
   </div>`;
 }
 
+function settingsView() {
+  const st = S.state;
+  const bk = S.backups;
+  if (!bk) loadBackups();
+
+  return `<div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <button class="pad" data-act="closeSettings" aria-label="Back">${ICON.back}</button>
+        <div><h1>Settings</h1><div class="date">Parents only</div></div>
+      </div>
+      ${themeButton()}
+    </div>
+    <div class="view ${S.entering ? "enter" : ""}">
+
+      <h2 class="section-title">Backups</h2>
+      <div class="card" style="margin-bottom:14px">
+        <div class="spread" style="gap:14px;flex-wrap:wrap">
+          <div style="min-width:0">
+            <h3>Keep a copy off the box</h3>
+            <div class="meta" style="margin-top:4px">
+              Snapshots live beside the data, so they cover mistakes but not losing the volume.
+              Download one now and then.
+            </div>
+          </div>
+          <div class="row">
+            <button class="btn small quiet" data-act="snapshotNow">Snapshot now</button>
+            <a class="btn accent" href="/api/backup" download>Download</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card flat" style="margin-bottom:14px">
+        <h3 style="margin-bottom:4px">Automatic snapshots</h3>
+        <div class="meta" style="margin-bottom:12px">
+          One a day, keeping the most recent ${bk ? bk.keep : 14}${bk ? ` · ${esc(bk.dir)}` : ""}
+        </div>
+        ${bk && bk.files.length ? `<div class="filelist">
+          ${bk.files.map(f => `<div class="frow"><span class="fname">${esc(f)}</span></div>`).join("")}
+        </div>` : `<p class="meta">${bk ? "No snapshots yet — one is written on the first run." : "Loading…"}</p>`}
+      </div>
+
+      <div class="card flat" style="margin-bottom:28px">
+        <h3 style="margin-bottom:6px">Restoring</h3>
+        <div class="meta" style="margin-bottom:10px">
+          Run on the machine hosting the container. The current data is copied aside first, so a
+          restore can be walked back.
+        </div>
+        <pre class="cmd">docker exec hearth node server.js --list-backups
+docker exec hearth node server.js --restore latest</pre>
+      </div>
+
+      <h2 class="section-title">Household</h2>
+      <div class="card flat" style="margin-bottom:14px">
+        <div class="spread">
+          <div>
+            <h3>Week starts on</h3>
+            <div class="meta">When every child's allowance renews</div>
+          </div>
+          <div class="row">
+            <button class="btn small ${st.settings.weekStartsOn === 0 ? "accent on" : ""}" data-act="weekStart" data-d="0">Sunday</button>
+            <button class="btn small ${st.settings.weekStartsOn === 1 ? "accent on" : ""}" data-act="weekStart" data-d="1">Monday</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card flat" style="margin-bottom:28px">
+        <h3 style="margin-bottom:6px">Forgotten PIN</h3>
+        <div class="meta" style="margin-bottom:10px">
+          PINs are stored hashed, so they can only be replaced, from the host.
+        </div>
+        <pre class="cmd">docker exec hearth node server.js --list-users
+docker exec hearth node server.js --reset-pin Parent 4821</pre>
+      </div>
+
+      <p class="meta mono" style="text-align:center;font-size:10px;color:var(--muted)">
+        build ${esc(String(st.version || "dev").slice(0, 12))}
+      </p>
+    </div>
+  </div>`;
+}
+
+function loadBackups() {
+  post("backups", {})
+    .then(data => { S.backups = data; render(); })
+    .catch(() => { S.backups = { files: [], keep: 14, dir: "" }; });
+}
+
 function adminView() {
   const st = S.state;
   const pending = st.approvals.length + st.redemptions.length;
@@ -1026,6 +1117,7 @@ function adminView() {
         <div><h1>${esc(st.me.name)}</h1><div class="date">${esc(st.date)}</div></div>
       </div>
       <div class="row">
+        <button class="pad" data-act="openSettings" aria-label="Settings">${ICON.gear}</button>
         ${themeButton()}
         <button class="btn quiet small" data-act="logout">Sign out</button>
       </div>
@@ -1323,50 +1415,6 @@ function adminFamily() {
         </div>
       </div>
     </div>
-    <div class="card flat form" style="margin-bottom:24px">
-      <div class="spread">
-        <div>
-          <h3>Week starts on</h3>
-          <div class="meta">When every child's allowance renews</div>
-        </div>
-        <div class="row">
-          <button class="btn small ${st.settings.weekStartsOn === 0 ? "accent on" : ""}" data-act="weekStart" data-d="0">Sunday</button>
-          <button class="btn small ${st.settings.weekStartsOn === 1 ? "accent on" : ""}" data-act="weekStart" data-d="1">Monday</button>
-        </div>
-      </div>
-    </div>
-    ${S.ledgerChild && S.ledger ? `<div class="card" style="margin-bottom:24px">
-      <div class="spread" style="margin-bottom:14px">
-        <div>
-          <h3>${esc(S.ledger.name)}'s points log</h3>
-          <div class="meta">${S.ledger.balance.allowance} allowance · ${S.ledger.balance.earned} saved</div>
-        </div>
-        <div class="row">
-          <button class="btn small quiet" data-act="moreLedger">Show more</button>
-          <button class="btn small quiet" data-act="closeLedger">Close</button>
-        </div>
-      </div>
-      ${S.ledger.entries.length ? S.ledger.entries.map(e => `<div class="lrow">
-        <span class="ldelta ${e.delta > 0 ? "up" : "down"}">${e.delta > 0 ? "+" : ""}${e.delta}</span>
-        <span class="lreason">${esc(e.reason)}${e.byName ? ` <i>· ${esc(e.byName)}</i>` : ""}</span>
-        <span class="lwhen">${esc(e.date)}</span>
-      </div>`).join("") : `<p class="meta">Nothing recorded yet.</p>`}
-    </div>` : ""}
-
-    <div class="card flat form" style="margin-bottom:24px">
-      <div class="spread">
-        <div>
-          <h3>Backups</h3>
-          <div class="meta" style="margin-top:3px">A snapshot is kept each day, ${
-            S.backups ? S.backups.files.length + " stored" : "rotating automatically"}. Download one to keep off the box.</div>
-        </div>
-        <div class="row">
-          <button class="btn small quiet" data-act="snapshotNow">Snapshot now</button>
-          <a class="btn small accent" href="/api/backup" download>Download</a>
-        </div>
-      </div>
-    </div>
-
     <h2 class="section-title">Children</h2>
     ${st.children.length ? `<div class="cards">${st.children.map(person).join("")}</div>` : `<p class="empty">No children yet.</p>`}
     <h2 class="section-title">Parents and guardians</h2>
@@ -1393,7 +1441,7 @@ function captureForm() {
 }
 
 function viewKey() {
-  return [S.view, S.tab, S.day || "", S.focus || "", S.month || ""].join("|");
+  return [S.view, S.tab, S.day || "", S.focus || "", S.month || "", S.settingsOpen ? "set" : ""].join("|");
 }
 
 function render() {
@@ -1406,7 +1454,7 @@ function render() {
   if (S.view === "loading") html = `<p class="empty" style="padding-top:60px">Loading…</p>`;
   else if (S.view === "login") html = loginView();
   else if (S.view === "child") html = S.focus ? focusView() : childView();
-  else html = adminView();
+  else html = S.settingsOpen ? settingsView() : adminView();
 
   root.innerHTML = html + (S.toast ? `<div class="toast">${esc(S.toast)}</div>` : "");
   // One-shot flags: clear them so the next render is calm.
@@ -1637,6 +1685,8 @@ root.addEventListener("click", async e => {
         toast("Saved " + r.file);
         return;
       }
+      case "openSettings": S.settingsOpen = true; S.backups = null; return render();
+      case "closeSettings": S.settingsOpen = false; return render();
       case "theme": cycleTheme(); return render();
       case "pickDay": {
         const date = node.dataset.date;
