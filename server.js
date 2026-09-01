@@ -48,6 +48,14 @@ function id(prefix) {
 
 const DEFAULT_ALLOWANCE = 500;
 const SHARED = "all";
+const CHILD_COLORS = ["ochre", "clay", "sage", "slate", "plum"];
+
+// Colour is how children are told apart at a glance, so a new one gets a
+// shade nobody else is using rather than defaulting to the same as a sibling.
+function freeColor() {
+  const taken = db.users.filter(u => u.role === "child").map(u => u.color);
+  return CHILD_COLORS.find(c => !taken.includes(c)) || CHILD_COLORS[taken.length % CHILD_COLORS.length];
+}
 
 function newChild(name, color, pin, earned) {
   return {
@@ -1006,7 +1014,11 @@ async function api(req, res, route) {
     } else {
       if (pin.length < 4) return json(res, 400, { error: "PIN needs at least 4 characters." });
       const role = body.role === "admin" ? "admin" : "child";
-      const person = { id: id("u"), name, role, color: str(body.color, 20) || "sage", secret: makeSecret(pin) };
+      const person = {
+        id: id("u"), name, role,
+        color: str(body.color, 20) || (role === "child" ? freeColor() : "sage"),
+        secret: makeSecret(pin),
+      };
       if (role === "child") {
         person.allowanceWeekly = num(body.allowanceWeekly, 0, 100000, DEFAULT_ALLOWANCE);
         person.allowanceRemaining = person.allowanceWeekly;

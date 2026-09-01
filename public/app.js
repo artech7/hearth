@@ -897,7 +897,8 @@ function dayPanel(date) {
     </div>` : `<p class="meta" style="margin-bottom:22px">Nothing scheduled.</p>`}
 
     ${board.map(b => `
-      <h2 class="section-title">${esc(b.child.name)}</h2>
+      <div class="childcol" data-color="${esc(b.child.color)}">
+      <h2 class="section-title whoname">${esc(b.child.name)}</h2>
       ${b.tasks.length ? `<div class="cards">${b.tasks.map(t => `<div class="card flat">
         <div class="spread">
           <div style="min-width:0">
@@ -912,6 +913,7 @@ function dayPanel(date) {
           </div>
         </div>
       </div>`).join("")}</div>` : `<p class="meta">Nothing scheduled.</p>`}
+      </div>
     `).join("")}
   </div>`;
 }
@@ -1000,20 +1002,20 @@ function adminToday() {
 
   return head + `<div class="board">` + board.map(b => {
     const done = b.tasks.filter(t => t.status === "done").length;
-    return `<div>
-      <div class="spread" style="margin-bottom:12px">
-        <div class="row">
-          <span class="avatar sm" data-color="${esc(b.child.color)}">${esc(initials(b.child.name))}</span>
-          <div>
-            <div style="font-size:15px;font-weight:500">${esc(b.child.name)}</div>
-            <div class="meta mono" style="font-size:10.5px;color:var(--muted)">${done}/${b.tasks.length} done today${
-              b.streak > 0 ? " · " + b.streak + " day streak" : ""}</div>
-          </div>
+    const pct = b.tasks.length ? Math.round((done / b.tasks.length) * 100) : 0;
+    return `<div class="childcol" data-color="${esc(b.child.color)}">
+      <div class="childhead">
+        <span class="childmark">${esc(initials(b.child.name))}</span>
+        <div class="childwho">
+          <h2>${esc(b.child.name)}</h2>
+          <div class="meta mono">${done}/${b.tasks.length} done${
+            b.streak > 0 ? " · " + b.streak + " day streak" : ""}</div>
         </div>
-        <div style="text-align:right">
+        <div class="childpts">
           <span class="points"><b>${b.child.points}</b><span>PTS</span></span>
-          <div class="meta mono" style="font-size:10px;color:var(--muted);margin-top:5px">${b.child.allowanceRemaining} allowance · ${b.child.earned} saved</div>
+          <div class="meta mono">${b.child.allowanceRemaining} allowance · ${b.child.earned} saved</div>
         </div>
+        <span class="childbar"><i style="width:${pct}%"></i></span>
       </div>
       ${b.tasks.length ? `<div class="cards">` + b.tasks.map(t => `<div class="card flat">
         <div class="spread">

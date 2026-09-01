@@ -915,3 +915,127 @@ label.lab { display: block; font-size: 12.5px; color: var(--muted); margin-botto
   color: var(--muted);
 }
 .ibtn.auto.on { color: var(--accent-ink); }
+
+/* ---- per-child identity ----
+   Each child already has a colour; this puts it to work so the columns read as
+   separate people rather than one long undifferentiated list. */
+
+.childcol { --who: var(--accent); --whosoft: rgba(168, 117, 42, .10); }
+.childcol[data-color="ochre"] { --who: #A8752A; --whosoft: rgba(168, 117, 42, .11); }
+.childcol[data-color="clay"]  { --who: #A85B3E; --whosoft: rgba(168, 91, 62, .11); }
+.childcol[data-color="sage"]  { --who: #40734F; --whosoft: rgba(64, 115, 79, .11); }
+.childcol[data-color="slate"] { --who: #43617D; --whosoft: rgba(67, 97, 125, .11); }
+.childcol[data-color="plum"]  { --who: #74507C; --whosoft: rgba(116, 80, 124, .11); }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .childcol[data-color="ochre"] { --who: #E0AC5E; --whosoft: rgba(224, 172, 94, .13); }
+  :root:not([data-theme="light"]) .childcol[data-color="clay"]  { --who: #DE8F6E; --whosoft: rgba(222, 143, 110, .13); }
+  :root:not([data-theme="light"]) .childcol[data-color="sage"]  { --who: #7FBE93; --whosoft: rgba(127, 190, 147, .13); }
+  :root:not([data-theme="light"]) .childcol[data-color="slate"] { --who: #86AACB; --whosoft: rgba(134, 170, 203, .13); }
+  :root:not([data-theme="light"]) .childcol[data-color="plum"]  { --who: #BC93C4; --whosoft: rgba(188, 147, 196, .13); }
+}
+:root[data-theme="dark"] .childcol[data-color="ochre"] { --who: #E0AC5E; --whosoft: rgba(224, 172, 94, .13); }
+:root[data-theme="dark"] .childcol[data-color="clay"]  { --who: #DE8F6E; --whosoft: rgba(222, 143, 110, .13); }
+:root[data-theme="dark"] .childcol[data-color="sage"]  { --who: #7FBE93; --whosoft: rgba(127, 190, 147, .13); }
+:root[data-theme="dark"] .childcol[data-color="slate"] { --who: #86AACB; --whosoft: rgba(134, 170, 203, .13); }
+:root[data-theme="dark"] .childcol[data-color="plum"]  { --who: #BC93C4; --whosoft: rgba(188, 147, 196, .13); }
+
+.childhead {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px 20px;
+  margin-bottom: 16px;
+  border-radius: 22px;
+  background: var(--bg);
+  box-shadow: var(--out);
+  overflow: hidden;
+}
+
+/* A band of the child's colour down the edge, so a column is identifiable
+   from the corner of your eye. */
+.childhead::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 6px;
+  background: var(--who);
+}
+
+.childmark {
+  flex: 0 0 auto;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--who);
+  background: var(--whosoft);
+  box-shadow: var(--out-sm), inset 0 0 0 2px var(--who);
+}
+
+.childwho { flex: 1; min-width: 0; }
+
+.childwho h2 {
+  margin: 0 0 3px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--who);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.childwho .meta { font-size: 10.5px; }
+
+.childpts { text-align: right; flex: 0 0 auto; }
+.childpts .points { box-shadow: var(--in-sm); }
+.childpts .points b { color: var(--who); }
+.childpts .meta { font-size: 10px; margin-top: 5px; }
+
+/* Progress sits along the bottom edge of the header. */
+.childbar {
+  position: absolute;
+  left: 6px; right: 0; bottom: 0;
+  height: 4px;
+  background: var(--track);
+}
+.childbar i {
+  display: block;
+  height: 100%;
+  background: var(--who);
+  transition: width 520ms cubic-bezier(.22, .9, .3, 1);
+}
+
+/* The column's own cards pick up a hint of the same colour. */
+.childcol .card.flat { box-shadow: var(--in-sm), inset 3px 0 0 var(--whosoft); }
+
+@media (max-width: 420px) {
+  .childhead { gap: 11px; padding: 14px 14px 18px; }
+  .childmark { width: 44px; height: 44px; font-size: 17px; }
+  .childwho h2 { font-size: 17px; }
+}
+
+/* Names as headings elsewhere carry the same colour and a marker. */
+.section-title.whoname {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--who);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.section-title.whoname::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--who);
+  flex: 0 0 auto;
+}
