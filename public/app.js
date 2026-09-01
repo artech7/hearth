@@ -26,6 +26,9 @@ const S = {
   sel: [],
   toast: "",
   taskKind: "study",
+  ledger: null,
+  ledgerChild: null,
+  ledgerLimit: 8,
   day: null,        // null means today
   dayData: null,    // fetched view for a non-current day
 };
@@ -639,10 +642,45 @@ function balanceCard(me) {
   </div>`;
 }
 
+function relTime(ms) {
+  const mins = Math.round((Date.now() - ms) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return mins + "m ago";
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return hrs + "h ago";
+  const days = Math.round(hrs / 24);
+  return days === 1 ? "yesterday" : days + "d ago";
+}
+
+function ledgerPanel() {
+  const led = S.ledger;
+  if (!led) { loadLedger(); return ""; }
+  if (!led.entries.length) return "";
+  return `<div class="card flat ledger" style="margin-bottom:20px">
+    <div class="spread" style="margin-bottom:12px">
+      <h3>Where your points went</h3>
+      ${led.entries.length >= (S.ledgerLimit || 8)
+        ? `<button class="btn small quiet" data-act="moreLedger">Show more</button>` : ""}
+    </div>
+    ${led.entries.map(e => `<div class="lrow">
+      <span class="ldelta ${e.delta > 0 ? "up" : "down"}">${e.delta > 0 ? "+" : ""}${e.delta}</span>
+      <span class="lreason">${esc(e.reason)}${e.byName ? ` <i>· ${esc(e.byName)}</i>` : ""}</span>
+      <span class="lwhen">${relTime(e.at)}</span>
+    </div>`).join("")}
+  </div>`;
+}
+
+function loadLedger(childId) {
+  post("ledger", { childId, limit: S.ledgerLimit || 8 })
+    .then(data => { S.ledger = data; render(); })
+    .catch(() => { S.ledger = { entries: [] }; });
+}
+
 function childRewards() {
   const st = S.state;
   return `
     ${balanceCard(st.me)}
+    ${ledgerPanel()}
     ${st.rewards.length ? `<div class="reward-grid">` + st.rewards.map(r => {
       const afford = st.me.points >= r.cost;
       const ic = iconFor(r.title, r.icon);
@@ -1249,6 +1287,7 @@ function adminFamily() {
       <div class="row">
         ${u.role === "child" ? `<button class="btn small quiet" data-act="adjust" data-id="${u.id}" data-delta="-5">−5</button>
         <button class="btn small quiet" data-act="adjust" data-id="${u.id}" data-delta="5">+5</button>` : ""}
+        ${u.role === "child" ? `<button class="btn small quiet" data-act="childLedger" data-id="${u.id}">Points log</button>` : ""}
         <button class="btn small quiet" data-act="editUser" data-id="${u.id}">Edit</button>
         ${u.id === st.me.id ? "" : `<button class="btn small quiet" data-act="deleteUser" data-id="${u.id}">Remove</button>`}
       </div>
@@ -1296,6 +1335,38 @@ function adminFamily() {
         </div>
       </div>
     </div>
+    ${S.ledgerChild && S.ledger ? `<div class="card" style="margin-bottom:24px">
+      <div class="spread" style="margin-bottom:14px">
+        <div>
+          <h3>${esc(S.ledger.name)}'s points log</h3>
+          <div class="meta">${S.ledger.balance.allowance} allowance · ${S.ledger.balance.earned} saved</div>
+        </div>
+        <div class="row">
+          <button class="btn small quiet" data-act="moreLedger">Show more</button>
+          <button class="btn small quiet" data-act="closeLedger">Close</button>
+        </div>
+      </div>
+      ${S.ledger.entries.length ? S.ledger.entries.map(e => `<div class="lrow">
+        <span class="ldelta ${e.delta > 0 ? "up" : "down"}">${e.delta > 0 ? "+" : ""}${e.delta}</span>
+        <span class="lreason">${esc(e.reason)}${e.byName ? ` <i>· ${esc(e.byName)}</i>` : ""}</span>
+        <span class="lwhen">${esc(e.date)}</span>
+      </div>`).join("") : `<p class="meta">Nothing recorded yet.</p>`}
+    </div>` : ""}
+
+    <div class="card flat form" style="margin-bottom:24px">
+      <div class="spread">
+        <div>
+          <h3>Backups</h3>
+          <div class="meta" style="margin-top:3px">A snapshot is kept each day, ${
+            S.backups ? S.backups.files.length + " stored" : "rotating automatically"}. Download one to keep off the box.</div>
+        </div>
+        <div class="row">
+          <button class="btn small quiet" data-act="snapshotNow">Snapshot now</button>
+          <a class="btn small accent" href="/api/backup" download>Download</a>
+        </div>
+      </div>
+    </div>
+
     <h2 class="section-title">Children</h2>
     ${st.children.length ? `<div class="cards">${st.children.map(person).join("")}</div>` : `<p class="empty">No children yet.</p>`}
     <h2 class="section-title">Parents and guardians</h2>
@@ -1548,6 +1619,24 @@ root.addEventListener("click", async e => {
         return;
       case "del": S.pin = S.pin.slice(0, -1); S.err = ""; return render();
 
+      case "moreLedger":
+        S.ledgerLimit = (S.ledgerLimit || 8) + 20;
+        S.ledger = null;
+        loadLedger(S.ledgerChild);
+        return render();
+      case "childLedger":
+        S.ledgerChild = node.dataset.id;
+        S.ledgerLimit = 20;
+        S.ledger = null;
+        loadLedger(node.dataset.id);
+        return render();
+      case "closeLedger": S.ledger = null; S.ledgerChild = null; return render();
+      case "snapshotNow": {
+        const r = await post("backupNow", {});
+        S.backups = await post("backups", {});
+        toast("Saved " + r.file);
+        return;
+      }
       case "theme": cycleTheme(); return render();
       case "pickDay": {
         const date = node.dataset.date;
@@ -1678,7 +1767,11 @@ root.addEventListener("click", async e => {
         await refresh();
         await reloadMonth();
         return toast("Marked done");
-      case "tab": S.tab = +node.dataset.i; S.form = null; S.day = null; S.dayData = null; return render();
+      case "tab":
+        S.tab = +node.dataset.i;
+        S.form = null; S.day = null; S.dayData = null;
+        S.ledger = null; S.ledgerChild = null; S.ledgerLimit = 8;
+        return render();
       case "taskKind": S.taskKind = node.dataset.k; S.form = null; return render();
       case "logout":
         await post("logout"); S.state = null; S.pick = null; S.view = "login";

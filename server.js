@@ -90,6 +90,7 @@ function seed() {
     ],
     logs: {},
     events: [],
+    ledger: [],
     rewards: [
       { id: id("r"), title: "30 min screen time", cost: 20, childIds: [], active: true },
       { id: id("r"), title: "Pick dinner", cost: 45, childIds: [], active: true },
@@ -104,6 +105,22 @@ function seed() {
 function migrate() {
   if (!db.settings) db.settings = { weekStartsOn: 1 };
   if (!Array.isArray(db.events)) db.events = [];
+  if (!Array.isArray(db.ledger)) db.ledger = [];
+
+  // Balances that existed before the ledger did need an opening entry, or the
+  // running total can never be reconciled against the recorded movements.
+  if (!db.ledger.length) {
+    for (const u of db.users.filter(x => x.role === "child")) {
+      if (u.earned > 0) {
+        ledgerAdd(u.id, u.earned, "earned", "Opening balance", null, { opening: true });
+      }
+      // Only record allowance already in hand. If the week hasn't been granted
+      // yet, refreshAllowance will record that grant itself in a moment.
+      if (u.allowanceWeek && u.allowanceRemaining > 0) {
+        ledgerAdd(u.id, u.allowanceRemaining, "allowance", "Opening allowance", null, { opening: true });
+      }
+    }
+  }
   for (const u of db.users) {
     if (u.role !== "child") { delete u.points; continue; }
     if (u.earned === undefined) u.earned = typeof u.points === "number" ? u.points : 0;
@@ -173,6 +190,72 @@ function save(now) {
     writeQueued = false;
     fs.writeFile(DATA_FILE, JSON.stringify(db, null, 2), () => {});
   }, 400);
+}
+
+/* ---------- backups ---------- */
+
+const BACKUP_DIR = process.env.BACKUP_DIR || path.join(path.dirname(DATA_FILE), "backups");
+const KEEP_BACKUPS = Number(process.env.KEEP_BACKUPS || 14);
+
+function backupName(now, prefix) {
+  const p2 = n => String(n).padStart(2, "0");
+  return `${prefix || "hearth"}-${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}` +
+    `-${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}.json`;
+}
+
+// Two snapshots in the same second must not collide, or a restore can
+// overwrite the very file it is restoring from.
+function uniquePath(dir, name) {
+  let candidate = path.join(dir, name);
+  let n = 2;
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(dir, name.replace(/\.json$/, `-${n}.json`));
+    n++;
+  }
+  return candidate;
+}
+
+function listBackups() {
+  try {
+    return fs.readdirSync(BACKUP_DIR)
+      .filter(f => f.startsWith("hearth-") && !f.startsWith("hearth-prerestore") && f.endsWith(".json"))
+      .sort();
+  } catch (err) {
+    return [];
+  }
+}
+
+// A snapshot is a plain copy of the data file, so restoring it needs nothing
+// more than moving a file into place.
+function backupNow(reason, prefix) {
+  try {
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const file = uniquePath(BACKUP_DIR, backupName(new Date(), prefix));
+    fs.writeFileSync(file, JSON.stringify(db, null, 2));
+
+    // Safety copies are kept out of the rotation so a restore can always be
+    // walked back, however many snapshots happen afterwards.
+    const all = prefix ? [] : listBackups();
+    for (const old of all.slice(0, Math.max(0, all.length - KEEP_BACKUPS))) {
+      try { fs.unlinkSync(path.join(BACKUP_DIR, old)); } catch (err) { /* already gone */ }
+    }
+    console.log(`Backup written: ${file}${reason ? " (" + reason + ")" : ""}`);
+    return file;
+  } catch (err) {
+    // A failed backup must never take the app down with it.
+    console.error("Backup failed:", err.message);
+    return null;
+  }
+}
+
+function lastBackupAge() {
+  const all = listBackups();
+  if (!all.length) return Infinity;
+  try {
+    return Date.now() - fs.statSync(path.join(BACKUP_DIR, all[all.length - 1])).mtimeMs;
+  } catch (err) {
+    return Infinity;
+  }
 }
 
 /* ---------- sessions ---------- */
@@ -259,8 +342,11 @@ function weekKey() {
 function refreshAllowance(child) {
   const key = weekKey();
   if (child.allowanceWeek !== key) {
+    const lapsed = child.allowanceWeek ? child.allowanceRemaining : 0;
     child.allowanceWeek = key;
     child.allowanceRemaining = child.allowanceWeekly;
+    if (lapsed > 0) ledgerAdd(child.id, -lapsed, "allowance", "Unspent allowance expired", null, {});
+    ledgerAdd(child.id, child.allowanceWeekly, "allowance", "Weekly allowance", null, {});
     save();
   }
   return child;
@@ -272,6 +358,28 @@ function eventVisibleTo(ev, childId) {
 
 function ownsTask(task, childId) {
   return task.childId === childId || task.childId === SHARED;
+}
+
+// Every movement of points is recorded. Balances are derived from work and
+// spending, and when a child asks why their total changed there has to be an
+// answer that isn't "I don't know".
+function ledgerAdd(childId, delta, bucket, reason, by, meta) {
+  const child = db.users.find(u => u.id === childId && u.role === "child");
+  if (!child || !delta) return;
+  db.ledger.push({
+    id: id("l"),
+    at: Date.now(),
+    date: today(),
+    childId,
+    delta,
+    bucket,
+    reason,
+    by: by || null,
+    meta: meta || {},
+    after: { allowance: child.allowanceRemaining, earned: child.earned },
+  });
+  // Keep the file from growing without bound; this is years of family use.
+  if (db.ledger.length > 20000) db.ledger.splice(0, db.ledger.length - 20000);
 }
 
 function balance(child) {
@@ -326,7 +434,7 @@ function settle(log, task) {
 
   if (task.type === "study") {
     log.status = "done";
-    award(log.childId, task.points, log);
+    award(log.childId, task.points, log, `Study finished: ${task.title}`, null);
   } else {
     log.status = "awaiting";
   }
@@ -334,11 +442,13 @@ function settle(log, task) {
   return log;
 }
 
-function award(childId, points, log) {
+function award(childId, points, log, reason, by) {
   const child = db.users.find(u => u.id === childId);
   if (!child) return;
   child.earned += points;
   if (log) log.awardedPoints = points;
+  ledgerAdd(childId, points, "earned", reason || "Task finished", by,
+    log ? { taskId: log.taskId, date: log.date } : {});
 }
 
 function scheduledOn(task, date, day) {
@@ -755,6 +865,54 @@ async function api(req, res, route) {
     return json(res, 200, { month: first.slice(0, 7), days });
   }
 
+  if (route === "backup" && req.method === "GET") {
+    if (!isAdmin) return deny();
+    const payload = JSON.stringify(db, null, 2);
+    res.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${backupName(new Date())}"`,
+      "Content-Length": Buffer.byteLength(payload),
+      "Cache-Control": "no-store",
+    });
+    return res.end(payload);
+  }
+
+  if (route === "backups") {
+    if (!isAdmin) return deny();
+    return json(res, 200, {
+      dir: BACKUP_DIR,
+      keep: KEEP_BACKUPS,
+      files: listBackups().slice(-KEEP_BACKUPS).reverse(),
+    });
+  }
+
+  if (route === "backupNow") {
+    if (!isAdmin) return deny();
+    const file = backupNow("requested");
+    if (!file) return json(res, 500, { error: "Couldn't write the backup." });
+    return json(res, 200, { ok: true, file: path.basename(file) });
+  }
+
+  if (route === "ledger") {
+    const childId = user.role === "child" ? user.id : str(body.childId, 40);
+    if (user.role === "child" && body.childId && body.childId !== user.id) {
+      return json(res, 403, { error: "That isn't your ledger." });
+    }
+    const child = db.users.find(u => u.id === childId && u.role === "child");
+    if (!child) return json(res, 404, { error: "Child not found." });
+    const limit = num(body.limit, 1, 200, 40);
+    const names = Object.fromEntries(db.users.map(u => [u.id, u.name]));
+    return json(res, 200, {
+      childId,
+      name: child.name,
+      balance: { allowance: child.allowanceRemaining, earned: child.earned, total: balance(child) },
+      entries: db.ledger
+        .filter(e => e.childId === childId)
+        .slice(-limit).reverse()
+        .map(e => ({ ...e, byName: e.by ? (names[e.by] || "a parent") : "" })),
+    });
+  }
+
   if (route === "history") {
     const childId = user.role === "child" ? user.id : str(body.childId, 40);
     if (user.role === "child" && body.childId && body.childId !== user.id) {
@@ -823,7 +981,8 @@ async function api(req, res, route) {
     log.status = "done";
     log.approvedBy = user.id;
     log.completedAt = Date.now();
-    award(log.childId, task ? task.points : 0, log);
+    award(log.childId, task ? task.points : 0, log,
+      `Chore approved: ${task ? task.title : "task"}`, user.id);
     save();
     return json(res, 200, stateFor(user));
   }
@@ -845,7 +1004,12 @@ async function api(req, res, route) {
     if (!log || log.status !== "done") return json(res, 409, { error: "Nothing to undo." });
     const task = db.tasks.find(t => t.id === log.taskId);
     const child = db.users.find(u => u.id === log.childId);
-    if (child && log.awardedPoints) child.earned = Math.max(0, child.earned - log.awardedPoints);
+    if (child && log.awardedPoints) {
+      const taken = Math.min(child.earned, log.awardedPoints);
+      child.earned = Math.max(0, child.earned - log.awardedPoints);
+      ledgerAdd(child.id, -taken, "earned",
+        `Undone: ${task ? task.title : "task"}`, user.id, { taskId: log.taskId, date: log.date });
+    }
     log.awardedPoints = 0;
     log.approvedBy = null;
     log.completedAt = null;
@@ -889,7 +1053,7 @@ async function api(req, res, route) {
     log.approvedBy = user.id;
     log.backfilled = true;
     if (task.durationMin) log.accumulatedMs = Math.max(log.accumulatedMs, task.durationMin * 60000);
-    award(child.id, task.points, log);
+    award(child.id, task.points, log, `Marked done for ${date}: ${task.title}`, user.id);
     save();
     return json(res, 200, { ok: true });
   }
@@ -911,7 +1075,11 @@ async function api(req, res, route) {
     if (!isAdmin) return deny();
     const child = db.users.find(u => u.id === body.childId && u.role === "child");
     if (!child) return json(res, 404, { error: "Child not found." });
-    child.earned = Math.max(0, child.earned + num(body.delta, -1000, 1000, 0));
+    const delta = num(body.delta, -1000, 1000, 0);
+    const before = child.earned;
+    child.earned = Math.max(0, child.earned + delta);
+    ledgerAdd(child.id, child.earned - before, "earned",
+      str(body.reason, 80) || (delta >= 0 ? "Given by a parent" : "Taken by a parent"), user.id, {});
     save();
     return json(res, 200, stateFor(user));
   }
@@ -1068,6 +1236,8 @@ async function api(req, res, route) {
       cost: reward.cost, fromAllowance: split.fromAllowance, fromEarned: split.fromEarned,
       week: weekKey(), at: Date.now(), status: "pending",
     });
+    ledgerAdd(user.id, -reward.cost, "both", `Redeemed: ${reward.title}`, null,
+      { rewardId: reward.id, fromAllowance: split.fromAllowance, fromEarned: split.fromEarned });
     save();
     return json(res, 200, stateFor(user));
   }
@@ -1087,6 +1257,9 @@ async function api(req, res, route) {
         const sameWeek = child.allowanceWeek === weekKey() && red.week === weekKey();
         child.earned += red.fromEarned + (sameWeek ? 0 : red.fromAllowance);
         if (sameWeek) child.allowanceRemaining = Math.min(child.allowanceWeekly, child.allowanceRemaining + red.fromAllowance);
+        const reward = db.rewards.find(r => r.id === red.rewardId);
+        ledgerAdd(child.id, red.cost, sameWeek ? "both" : "earned",
+          `Refunded: ${reward ? reward.title : "reward"}`, user.id, { rewardId: red.rewardId });
       }
     }
     red.handledBy = user.id;
@@ -1113,6 +1286,65 @@ function runCommand(argv) {
       console.log(`    ${u.name.padEnd(18)} ${u.role.padEnd(7)} ${u.id}`);
     }
     console.log("");
+    return true;
+  }
+
+  if (cmd === "--list-backups") {
+    const all = listBackups();
+    if (!all.length) {
+      console.log(`\n  No backups yet in ${BACKUP_DIR}\n`);
+      return true;
+    }
+    console.log(`\n  Backups in ${BACKUP_DIR}:\n`);
+    for (const f of all.slice().reverse()) {
+      const size = (fs.statSync(path.join(BACKUP_DIR, f)).size / 1024).toFixed(0);
+      console.log(`    ${f}   ${size} KB`);
+    }
+    console.log("");
+    return true;
+  }
+
+  if (cmd === "--backup") {
+    const file = backupNow("manual");
+    if (!file) process.exit(1);
+    return true;
+  }
+
+  if (cmd === "--restore") {
+    const which = argv[3];
+    if (!which) {
+      console.error("\n  Usage: node server.js --restore <filename|latest>\n");
+      process.exit(1);
+    }
+    const all = listBackups();
+    const name = which === "latest" ? all[all.length - 1] : which;
+    if (!name) {
+      console.error("\n  No backups to restore from. Try --list-backups.\n");
+      process.exit(1);
+    }
+    const from = path.isAbsolute(name) ? name : path.join(BACKUP_DIR, name);
+    if (!fs.existsSync(from)) {
+      console.error(`\n  No such backup: ${from}\n  Try --list-backups.\n`);
+      process.exit(1);
+    }
+
+    let incoming;
+    try {
+      incoming = JSON.parse(fs.readFileSync(from, "utf8"));
+      if (!Array.isArray(incoming.users) || !incoming.users.length) throw new Error("no users in that file");
+    } catch (err) {
+      console.error(`\n  That file isn't a usable Hearth backup: ${err.message}\n`);
+      process.exit(1);
+    }
+
+    // The current data is itself backed up first, so a restore is reversible.
+    const safety = backupNow("before restore", "hearth-prerestore");
+    fs.writeFileSync(DATA_FILE, JSON.stringify(incoming, null, 2));
+    console.log(`\n  Restored ${path.basename(from)} into ${DATA_FILE}`);
+    console.log(`  ${incoming.users.length} people, ${(incoming.tasks || []).length} tasks, ` +
+      `${Object.keys(incoming.logs || {}).length} day records`);
+    if (safety) console.log(`  Previous data saved as ${path.basename(safety)}`);
+    console.log("  Restart the container to pick it up.\n");
     return true;
   }
 
@@ -1156,6 +1388,12 @@ load();
 loadSessions();
 
 if (runCommand(process.argv)) process.exit(0);
+// A snapshot a day, plus one at startup if the last is stale.
+if (lastBackupAge() > 20 * 3600 * 1000) backupNow("startup");
+setInterval(() => {
+  if (lastBackupAge() > 20 * 3600 * 1000) backupNow("daily");
+}, 3600 * 1000);
+
 setInterval(() => {
   // Settle any timers that ran out while nobody was looking.
   const date = today();

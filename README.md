@@ -133,6 +133,32 @@ Each day gets its own entry, so a child can tick off Tuesday without touching Th
 **Marking past work done.** From that day panel, any task that wasn't completed shows a **Mark done** button, which awards the full points and counts toward history and streaks — for when someone did the job and nobody remembered to check it off. It works on today and any past day, never a future one, and refuses a task that wasn't scheduled that day or belongs to another child. Undo reverses it.
 
 
+## Backups
+
+A snapshot of `data.json` is written to a `backups/` folder beside it — once at startup if the last one is stale, then daily, keeping the most recent 14. `BACKUP_DIR` and `KEEP_BACKUPS` change either.
+
+From the Family tab a parent can **Download** the current data as a file, or take a **Snapshot now**. Downloading is the one that matters: a backup living in the same volume as the data doesn't survive losing the volume.
+
+```bash
+sudo docker exec hearth node server.js --list-backups
+sudo docker exec hearth node server.js --backup
+sudo docker exec hearth node server.js --restore latest
+sudo docker exec hearth node server.js --restore hearth-2026-08-30-030000.json
+```
+
+A restore validates the file before touching anything and copies the current data aside first as `hearth-prerestore-*`, kept out of the rotation so it can't be pruned away. Restart the container afterwards to pick up the restored file.
+
+## The points log
+
+Every movement of points is recorded: work finished, chores approved, retroactive completions, parent adjustments, undos, redemptions, refunds, the weekly allowance grant, and allowance that expired unspent. Each entry keeps the amount, which bucket it touched, the reason, who did it, and the balance afterwards.
+
+Children see **Where your points went** on their Rewards tab. Parents get a **Points log** button per child in the Family tab.
+
+The point is answerable questions. When a child says they had more points yesterday, the log says what happened and who did it — which matters in a system whose job is being fair between siblings.
+
+Balances that predate the log get an opening entry, so the entries always sum to the current total.
+
+
 ## Data and backups
 
 Existing `data.json` files upgrade automatically on first launch: the old single `points` number becomes savings, and everyone picks up a full allowance.
