@@ -896,10 +896,16 @@ function dayPanel(date) {
       </div>`).join("")}
     </div>` : `<p class="meta" style="margin-bottom:22px">Nothing scheduled.</p>`}
 
-    ${board.map(b => `
-      <div class="childcol" data-color="${esc(b.child.color)}">
-      <h2 class="section-title whoname">${esc(b.child.name)}</h2>
-      ${b.tasks.length ? `<div class="cards">${b.tasks.map(t => `<div class="card flat">
+    ${board.map(b => {
+      const doneCount = b.tasks.filter(t => t.status === "done").length;
+      return `
+      <div class="childcol childblock" data-color="${esc(b.child.color)}">
+      <div class="whoband">
+        <span class="whomark">${esc(initials(b.child.name))}</span>
+        <h2>${esc(b.child.name)}</h2>
+        <span class="whocount">${doneCount}/${b.tasks.length} done</span>
+      </div>
+      ${b.tasks.length ? `<div class="cards childbody">${b.tasks.map(t => `<div class="card flat">
         <div class="spread">
           <div style="min-width:0">
             <h3>${esc(t.title)}</h3>
@@ -912,9 +918,10 @@ function dayPanel(date) {
             ${t.status === "done" ? `<button class="btn small quiet" data-act="undo" data-key="${t.key}">Undo</button>` : ""}
           </div>
         </div>
-      </div>`).join("")}</div>` : `<p class="meta">Nothing scheduled.</p>`}
+      </div>`).join("")}</div>` : `<p class="meta childbody">Nothing scheduled.</p>`}
       </div>
-    `).join("")}
+    `;
+    }).join("")}
   </div>`;
 }
 
