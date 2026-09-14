@@ -1176,3 +1176,77 @@ label.lab { display: block; font-size: 12.5px; color: var(--muted); margin-botto
   white-space: pre;
   user-select: all;
 }
+
+/* ---- modal sheets ---- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(14, 20, 16, .48);
+  backdrop-filter: blur(3px);
+  animation: fadeIn 200ms ease both;
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheetIn {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+.sheet {
+  width: 100%;
+  max-width: 620px;
+  max-height: min(88vh, 820px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 26px;
+  background: var(--bg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .45), var(--out);
+  animation: sheetIn 280ms cubic-bezier(.22, .9, .3, 1) both;
+  overflow: hidden;
+}
+
+.sheethead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px 14px;
+  border-bottom: 0.5px solid var(--track);
+}
+
+.sheethead h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.sheetbody {
+  padding: 18px 20px 22px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* On a phone the sheet takes the bottom of the screen, which is where thumbs are. */
+@media (max-width: 560px) {
+  .modal { padding: 0; align-items: flex-end; }
+  .sheet {
+    max-width: none;
+    max-height: 92vh;
+    border-radius: 26px 26px 0 0;
+  }
+  @keyframes sheetIn {
+    from { opacity: 0; transform: translateY(40px); }
+    to   { opacity: 1; transform: none; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal, .sheet { animation: none !important; }
+}

@@ -26,6 +26,7 @@ const S = {
   sel: [],
   toast: "",
   taskKind: "study",
+  modal: null,
   settingsOpen: false,
   backups: null,
   ledger: null,
@@ -162,6 +163,8 @@ const ICON = {
   chevL: '<svg viewBox="0 0 24 24"><path d="M15.4 4.6 13.9 3l-9 9 9 9 1.5-1.6L8 12z"/></svg>',
   chevR: '<svg viewBox="0 0 24 24"><path d="M8.6 3 7.1 4.6 14 12l-6.9 7.4L8.6 21l9-9z"/></svg>',
   back: '<svg viewBox="0 0 24 24"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>',
+  person: '<svg viewBox="0 0 24 24"><path d="M12 2.6a4.7 4.7 0 1 1 0 9.4 4.7 4.7 0 0 1 0-9.4zM3.4 20.2c0-4.2 3.9-6.6 8.6-6.6s8.6 2.4 8.6 6.6a1.2 1.2 0 0 1-1.2 1.2H4.6a1.2 1.2 0 0 1-1.2-1.2z"/></svg>',
+  close: '<svg viewBox="0 0 24 24"><path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/></svg>',
   gear: '<svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M9.43 1.30 L14.57 1.30 L13.28 3.90 L16.82 5.37 L17.75 2.62 L21.38 6.25 L18.63 7.18 L20.10 10.72 L22.70 9.43 L22.70 14.57 L20.10 13.28 L18.63 16.82 L21.38 17.75 L17.75 21.38 L16.82 18.63 L13.28 20.10 L14.57 22.70 L9.43 22.70 L10.72 20.10 L7.18 18.63 L6.25 21.38 L2.62 17.75 L5.37 16.82 L3.90 13.28 L1.30 14.57 L1.30 9.43 L3.90 10.72 L5.37 7.18 L2.62 6.25 L6.25 2.62 L7.18 5.37 L10.72 3.90 Z M12 8.3A3.7 3.7 0 1 0 12 15.7A3.7 3.7 0 1 0 12 8.3Z"/></svg>',
   system: '<svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2v16a8 8 0 0 0 0-16z"/></svg>',
   sun: '<svg viewBox="0 0 24 24"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5h0v3h0zm-1 0h2v3h-2zm0 19h2v3h-2zM2 11h3v2H2zm17 0h3v2h-3zM4.2 5.6l1.4-1.4 2.1 2.1-1.4 1.4zM16.3 17.7l1.4-1.4 2.1 2.1-1.4 1.4zM4.2 18.4l2.1-2.1 1.4 1.4-2.1 2.1zM16.3 6.3l2.1-2.1 1.4 1.4-2.1 2.1z"/></svg>',
@@ -1010,6 +1013,20 @@ function themeButton() {
     aria-label="Theme: ${mode}. Tap to change.">${icon}</button>`;
 }
 
+// Forms used to sit at the top of a tab, which meant pressing Edit on a task
+// far down the page changed something you couldn't see. They open here instead.
+function modal(title, body) {
+  return `<div class="modal" data-act="modalBackdrop">
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+      <div class="sheethead">
+        <h2>${esc(title)}</h2>
+        <button class="pad" data-act="closeModal" aria-label="Close">${ICON.close}</button>
+      </div>
+      <div class="sheetbody">${body}</div>
+    </div>
+  </div>`;
+}
+
 function tabBar(labels) {
   return `<div class="tabs" style="grid-template-columns:repeat(${labels.length},1fr)">
     <span class="thumb" style="width:calc((100% - 10px)/${labels.length});transform:translateX(calc(${S.tab} * 100%))"></span>
@@ -1226,9 +1243,34 @@ function adminTasks() {
       <button data-act="taskKind" data-k="study" aria-selected="${kind === "study"}">Study</button>
       <button data-act="taskKind" data-k="chore" aria-selected="${kind === "chore"}">Chores</button>
     </div>
-    <div class="card form" style="margin-bottom:24px">
-      <p class="eyebrow">${f.id ? "Edit" : "New"} ${kind === "chore" ? "chore" : "study block"}</p>
-      <div class="stack">
+    <button class="bigbtn" data-act="newTask">
+      ${ICON.cal}
+      <span>
+        <b>New ${kind === "chore" ? "chore" : "study block"}</b>
+        <small>${kind === "chore" ? "No timer length — done when they say it's done" : "Runs against a timer"}</small>
+      </span>
+    </button>
+    ${[{ id: "all", name: "Everyone" }].concat(st.children).map(c => {
+      const list = st.allTasks.filter(t => t.childId === c.id && t.type === kind);
+      if (!list.length) return "";
+      return `<h2 class="section-title">${esc(c.name)}</h2>
+        <div class="cards">${list.map(t => `<div class="card flat">
+          <div class="spread">
+            <div>
+              <h3>${esc(t.title)}</h3>
+              <div class="meta">${t.type === "chore" ? "no set time" : t.durationMin + " min"} · ${t.points} pts · ${
+                t.onceOn ? "once on " + t.onceOn : t.days.length === 7 ? "daily" : t.days.map(d => DAYS[d]).join("")}</div>
+            </div>
+            <div class="row">
+              <button class="btn small quiet" data-act="editTask" data-id="${t.id}">Edit</button>
+              <button class="btn small quiet" data-act="deleteTask" data-id="${t.id}">Remove</button>
+            </div>
+          </div>
+        </div>`).join("")}</div>`;
+    }).join("")}
+    ${S.modal === "task" ? modal(
+      (f.id ? "Edit " : "New ") + (kind === "chore" ? "chore" : "study block"),
+      `<div class="stack">
         <div><label class="lab" for="f-title">Name</label>
           <input class="field" id="f-title" value="${esc(f.title)}" placeholder="Reading, dishwasher, piano…"></div>
         <div class="grid2">
@@ -1269,26 +1311,7 @@ function adminTasks() {
           ${f.id ? `<button class="btn quiet small" data-act="cancelForm">Cancel</button>` : ""}
           <button class="btn accent" data-act="saveTask">${f.id ? "Save changes" : "Add task"}</button>
         </div>
-      </div>
-    </div>
-    ${[{ id: "all", name: "Everyone" }].concat(st.children).map(c => {
-      const list = st.allTasks.filter(t => t.childId === c.id && t.type === kind);
-      if (!list.length) return "";
-      return `<h2 class="section-title">${esc(c.name)}</h2>
-        <div class="cards">${list.map(t => `<div class="card flat">
-          <div class="spread">
-            <div>
-              <h3>${esc(t.title)}</h3>
-              <div class="meta">${t.type === "chore" ? "no set time" : t.durationMin + " min"} · ${t.points} pts · ${
-                t.onceOn ? "once on " + t.onceOn : t.days.length === 7 ? "daily" : t.days.map(d => DAYS[d]).join("")}</div>
-            </div>
-            <div class="row">
-              <button class="btn small quiet" data-act="editTask" data-id="${t.id}">Edit</button>
-              <button class="btn small quiet" data-act="deleteTask" data-id="${t.id}">Remove</button>
-            </div>
-          </div>
-        </div>`).join("")}</div>`;
-    }).join("")}`;
+      </div>`) : ""}`;
 }
 
 function adminRewards() {
@@ -1297,9 +1320,26 @@ function adminRewards() {
   const previewTitle = f.title || "Reward name";
 
   return `
-    <div class="card form" style="margin-bottom:24px">
-      <p class="eyebrow">${f.id ? "Edit reward" : "New reward"}</p>
-      <div class="stack">
+    <button class="bigbtn" data-act="newReward">
+      ${iconSvg(iconFor("gift", "gift"), 22)}
+      <span>
+        <b>New reward</b>
+        <small>Something to spend points on</small>
+      </span>
+    </button>
+    <div class="cards">${st.rewards.map(r => `<div class="card flat">
+      <div class="spread">
+        <div>
+          <h3>${esc(r.title)}</h3>
+          <div class="meta">${r.cost} pts · ${r.childIds.length ? r.childIds.map(cid => (st.children.find(c => c.id === cid) || {}).name).join(", ") : "everyone"} · ${esc(iconFor(r.title, r.icon).name.toLowerCase())} · ${esc(skyFor(r.title + r.id, r.sky).name.toLowerCase())}</div>
+        </div>
+        <div class="row">
+          <button class="btn small quiet" data-act="editReward" data-id="${r.id}">Edit</button>
+          <button class="btn small quiet" data-act="deleteReward" data-id="${r.id}">Remove</button>
+        </div>
+      </div>
+    </div>`).join("")}</div>
+    ${S.modal === "reward" ? modal(f.id ? "Edit reward" : "New reward", `<div class="stack">
         <div><label class="lab" for="r-title">Reward</label>
           <input class="field" id="r-title" value="${esc(f.title)}" placeholder="Movie night, later bedtime…"></div>
         <div><label class="lab" for="r-cost">Cost in points</label>
@@ -1347,20 +1387,7 @@ function adminRewards() {
           ${f.id ? `<button class="btn quiet small" data-act="cancelForm">Cancel</button>` : ""}
           <button class="btn accent" data-act="saveReward">${f.id ? "Save changes" : "Add reward"}</button>
         </div>
-      </div>
-    </div>
-    <div class="cards">${st.rewards.map(r => `<div class="card flat">
-      <div class="spread">
-        <div>
-          <h3>${esc(r.title)}</h3>
-          <div class="meta">${r.cost} pts · ${r.childIds.length ? r.childIds.map(cid => (st.children.find(c => c.id === cid) || {}).name).join(", ") : "everyone"} · ${esc(iconFor(r.title, r.icon).name.toLowerCase())} · ${esc(skyFor(r.title + r.id, r.sky).name.toLowerCase())}</div>
-        </div>
-        <div class="row">
-          <button class="btn small quiet" data-act="editReward" data-id="${r.id}">Edit</button>
-          <button class="btn small quiet" data-act="deleteReward" data-id="${r.id}">Remove</button>
-        </div>
-      </div>
-    </div>`).join("")}</div>`;
+      </div>`) : ""}`;
 }
 
 function adminFamily() {
@@ -1388,9 +1415,18 @@ function adminFamily() {
   </div>`;
 
   return `
-    <div class="card form" style="margin-bottom:24px">
-      <p class="eyebrow">${f.id ? "Edit person" : "Add someone"}</p>
-      <div class="stack">
+    <button class="bigbtn" data-act="newUser">
+      ${ICON.person}
+      <span>
+        <b>Add someone</b>
+        <small>A child, or another parent or guardian</small>
+      </span>
+    </button>
+    <h2 class="section-title">Children</h2>
+    ${st.children.length ? `<div class="cards">${st.children.map(person).join("")}</div>` : `<p class="empty">No children yet.</p>`}
+    <h2 class="section-title">Parents and guardians</h2>
+    <div class="cards">${st.admins.map(person).join("")}</div>
+    ${S.modal === "user" ? modal(f.id ? "Edit person" : "Add someone", `<div class="stack">
         <div><label class="lab" for="u-name">Name</label>
           <input class="field" id="u-name" value="${esc(f.name)}"></div>
         <div class="grid2">
@@ -1414,15 +1450,7 @@ function adminFamily() {
           ${f.id ? `<button class="btn quiet small" data-act="cancelForm">Cancel</button>` : ""}
           <button class="btn accent" data-act="saveUser">${f.id ? "Save changes" : "Add person"}</button>
         </div>
-      </div>
-    </div>
-    <h2 class="section-title">Children</h2>
-    ${st.children.length ? `<div class="cards">${st.children.map(person).join("")}</div>` : `<p class="empty">No children yet.</p>`}
-    <h2 class="section-title">Parents and guardians</h2>
-    <div class="cards">${st.admins.map(person).join("")}</div>
-    <p class="meta mono" style="text-align:center;margin-top:28px;font-size:10px;color:var(--muted)">
-      build ${esc(String(st.version || "dev").slice(0, 12))}
-    </p>`;
+      </div>`) : ""}`;
 }
 
 /* ---------- render ---------- */
@@ -1442,7 +1470,8 @@ function captureForm() {
 }
 
 function viewKey() {
-  return [S.view, S.tab, S.day || "", S.focus || "", S.month || "", S.settingsOpen ? "set" : ""].join("|");
+  return [S.view, S.tab, S.day || "", S.focus || "", S.month || "",
+    S.settingsOpen ? "set" : "", S.modal || ""].join("|");
 }
 
 function render() {
@@ -1820,10 +1849,10 @@ root.addEventListener("click", async e => {
         return toast("Marked done");
       case "tab":
         S.tab = +node.dataset.i;
-        S.form = null; S.day = null; S.dayData = null;
+        S.form = null; S.modal = null; S.day = null; S.dayData = null;
         S.ledger = null; S.ledgerChild = null; S.ledgerLimit = 8;
         return render();
-      case "taskKind": S.taskKind = node.dataset.k; S.form = null; return render();
+      case "taskKind": S.taskKind = node.dataset.k; S.form = null; S.modal = null; return render();
       case "logout":
         await post("logout"); S.state = null; S.pick = null; S.view = "login";
         S.profiles = (await get("profiles")).profiles; return render();
@@ -1905,48 +1934,70 @@ root.addEventListener("click", async e => {
       }
       case "roleChanged": { const f = formState("user", {}); readUserForm(f); f.role = val("u-role"); return render(); }
       case "pickColor": { const f = formState("user", {}); readUserForm(f); f.color = node.dataset.c; return render(); }
-      case "cancelForm": S.form = null; return render();
+      case "cancelForm": S.form = null; S.modal = null; return render();
 
+      case "newTask":
+        S.form = null;
+        S.modal = "task";
+        return render();
       case "editTask": {
         const t = S.state.allTasks.find(x => x.id === node.dataset.id);
         S.taskKind = t.type;
-        S.form = Object.assign({ kind: "task" }, t); return render();
+        S.form = Object.assign({ kind: "task" }, t);
+        S.modal = "task";
+        return render();
       }
+      case "closeModal": S.modal = null; S.form = null; return render();
+      case "modalBackdrop":
+        // only a click on the backdrop itself, not on the sheet inside it
+        if (e.target.classList && e.target.classList.contains("modal")) {
+          S.modal = null; S.form = null; return render();
+        }
+        return;
       case "saveTask": {
         const f = formState("task", { id: "", days: [0, 1, 2, 3, 4, 5, 6] });
         readTaskForm(f);
         if (!f.onceOn && !f.days.length) return toast("Pick at least one day.");
         if (f.onceOn && !/^\d{4}-\d{2}-\d{2}$/.test(f.onceOn)) return toast("Pick a date for the one-off.");
         setState(await post("saveTask", f));
-        S.form = null; toast(f.id ? "Task updated" : "Task added"); return;
+        S.form = null; S.modal = null;
+        toast(f.id ? "Task updated" : "Task added"); return;
       }
       case "deleteTask":
         if (!confirm("Remove this task?")) return;
         setState(await post("deleteTask", { id: node.dataset.id })); return render();
 
+      case "newReward":
+        S.form = null; S.modal = "reward"; return render();
       case "editReward": {
         const r = S.state.rewards.find(x => x.id === node.dataset.id);
-        S.form = Object.assign({ kind: "reward", sky: "", icon: "" }, r); return render();
+        S.form = Object.assign({ kind: "reward", sky: "", icon: "" }, r);
+        S.modal = "reward"; return render();
       }
       case "saveReward": {
         const f = formState("reward", { id: "", childIds: [] });
         readRewardForm(f);
         setState(await post("saveReward", f));
-        S.form = null; toast(f.id ? "Reward updated" : "Reward added"); return;
+        S.form = null; S.modal = null;
+        toast(f.id ? "Reward updated" : "Reward added"); return;
       }
       case "deleteReward":
         if (!confirm("Remove this reward?")) return;
         setState(await post("deleteReward", { id: node.dataset.id })); return render();
 
+      case "newUser":
+        S.form = null; S.modal = "user"; return render();
       case "editUser": {
         const u = [...S.state.children, ...S.state.admins].find(x => x.id === node.dataset.id);
-        S.form = Object.assign({ kind: "user", pin: "" }, u); return render();
+        S.form = Object.assign({ kind: "user", pin: "" }, u);
+        S.modal = "user"; return render();
       }
       case "saveUser": {
         const f = formState("user", { id: "", color: "ochre" });
         readUserForm(f);
         setState(await post("saveUser", f));
-        S.form = null; toast("Saved"); return;
+        S.form = null; S.modal = null;
+        toast("Saved"); return;
       }
       case "deleteUser":
         if (!confirm("Remove this person and their tasks?")) return;
@@ -2007,6 +2058,7 @@ document.addEventListener("keydown", e => {
       if (S.pin.length === 4) submitPin();
     } else if (e.key === "Backspace") { S.pin = S.pin.slice(0, -1); render(); }
     else if (e.key === "Escape") { S.pick = null; S.pin = ""; render(); }
+  } else if (e.key === "Escape" && S.modal) { S.modal = null; S.form = null; render();
   } else if (e.key === "Escape" && S.focus) { S.focus = null; render(); }
 });
 
